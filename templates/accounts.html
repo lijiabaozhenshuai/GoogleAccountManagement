@@ -58,7 +58,9 @@
                 <th>账号</th>
                 <th>密码</th>
                 <th>辅助邮箱</th>
-                <th>状态</th>
+                <th>登录状态</th>
+                <th>环境ID</th>
+                <th>使用状态</th>
                 <th>创建时间</th>
                 <th class="actions-cell">操作</th>
             </tr>
@@ -72,9 +74,139 @@
         <p>暂无数据</p>
     </div>
 </div>
+
+<!-- 日志弹窗 -->
+<div class="modal-overlay" id="log-modal" style="display: none;">
+    <div class="modal" style="max-width: 700px;">
+        <div class="modal-header">
+            <h3 id="log-modal-title">登录日志</h3>
+            <button class="modal-close" onclick="closeLogModal()">
+                <i data-lucide="x"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="log-container" id="log-container">
+                <!-- 日志内容动态加载 -->
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeLogModal()">关闭</button>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
+<style>
+    .login-status-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 500;
+    }
+    .login-status-tag.not_logged { background: #f3f4f6; color: #6b7280; }
+    .login-status-tag.logging { background: #dbeafe; color: #2563eb; }
+    .login-status-tag.success { background: #d1fae5; color: #059669; }
+    .login-status-tag.password_error { background: #fee2e2; color: #dc2626; }
+    .login-status-tag.need_phone { background: #fef3c7; color: #d97706; }
+    .login-status-tag.need_2fa { background: #fef3c7; color: #d97706; }
+    .login-status-tag.disabled { background: #fee2e2; color: #dc2626; }
+    .login-status-tag.failed { background: #fee2e2; color: #dc2626; }
+    
+    .env-id-cell {
+        font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+        font-size: 11px;
+        color: var(--text-muted);
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    
+    .action-btns {
+        display: flex;
+        gap: 4px;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    
+    .action-btn.login { color: #2563eb; }
+    .action-btn.login:hover { background: #dbeafe; }
+    .action-btn.log { color: #8b5cf6; }
+    .action-btn.log:hover { background: #ede9fe; }
+    .action-btn.reset { color: #f59e0b; }
+    .action-btn.reset:hover { background: #fef3c7; }
+    
+    .log-container {
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    
+    .log-item {
+        display: flex;
+        gap: 12px;
+        padding: 12px;
+        border-bottom: 1px solid var(--border-color);
+        font-size: 13px;
+    }
+    
+    .log-item:last-child {
+        border-bottom: none;
+    }
+    
+    .log-time {
+        color: var(--text-muted);
+        white-space: nowrap;
+        font-size: 12px;
+    }
+    
+    .log-status {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 10px;
+        font-size: 11px;
+        font-weight: 500;
+    }
+    
+    .log-status.start { background: #dbeafe; color: #2563eb; }
+    .log-status.info { background: #f3f4f6; color: #6b7280; }
+    .log-status.success { background: #d1fae5; color: #059669; }
+    .log-status.failed { background: #fee2e2; color: #dc2626; }
+    .log-status.password_error { background: #fee2e2; color: #dc2626; }
+    .log-status.need_phone { background: #fef3c7; color: #d97706; }
+    .log-status.need_2fa { background: #fef3c7; color: #d97706; }
+    .log-status.disabled { background: #fee2e2; color: #dc2626; }
+    
+    .log-message {
+        color: var(--text-primary);
+        flex: 1;
+    }
+    
+    .log-empty {
+        text-align: center;
+        padding: 40px;
+        color: var(--text-muted);
+    }
+    
+    .logging-spinner {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border: 2px solid #2563eb;
+        border-top-color: transparent;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+</style>
+
 <script>
     const API_BASE = '/api/accounts';
     const COLUMNS = ['account', 'password', 'backup_email'];
@@ -83,10 +215,23 @@
         password: '密码',
         backup_email: '辅助邮箱'
     };
+    
+    const LOGIN_STATUS_MAP = {
+        'not_logged': '未登录',
+        'logging': '登录中',
+        'success': '登录成功',
+        'password_error': '密码错误',
+        'need_phone': '需要手机号',
+        'need_2fa': '需要2FA',
+        'disabled': '账号禁用',
+        'failed': '登录失败'
+    };
 
     // 页面加载时获取数据
     document.addEventListener('DOMContentLoaded', () => {
         loadData();
+        // 每10秒自动刷新一次
+        setInterval(loadData, 10000);
     });
 
     // 加载数据
@@ -112,7 +257,12 @@
         }
         
         emptyState.style.display = 'none';
-        tbody.innerHTML = items.map(item => `
+        tbody.innerHTML = items.map(item => {
+            const loginStatus = item.login_status || 'not_logged';
+            const loginStatusText = LOGIN_STATUS_MAP[loginStatus] || '未知';
+            const isLogging = loginStatus === 'logging';
+            
+            return `
             <tr data-id="${item.id}">
                 <td class="checkbox-cell">
                     <input type="checkbox" class="checkbox row-checkbox" value="${item.id}" onchange="updateSelection()">
@@ -121,6 +271,13 @@
                 <td>${escapeHtml(item.password)}</td>
                 <td>${escapeHtml(item.backup_email)}</td>
                 <td>
+                    <span class="login-status-tag ${loginStatus}">
+                        ${isLogging ? '<span class="logging-spinner"></span>' : ''}
+                        ${loginStatusText}
+                    </span>
+                </td>
+                <td class="env-id-cell" title="${escapeHtml(item.browser_env_id || '')}">${escapeHtml(item.browser_env_id || '-')}</td>
+                <td>
                     <span class="status-tag ${item.status ? 'used' : 'unused'}">
                         ${item.status ? '已使用' : '未使用'}
                     </span>
@@ -128,6 +285,15 @@
                 <td>${item.created_at}</td>
                 <td class="actions-cell">
                     <div class="action-btns">
+                        <button class="action-btn login" onclick="autoLogin(${item.id})" title="自动登录" ${isLogging ? 'disabled' : ''}>
+                            <i data-lucide="log-in"></i>
+                        </button>
+                        <button class="action-btn log" onclick="viewLogs(${item.id})" title="查看日志">
+                            <i data-lucide="file-text"></i>
+                        </button>
+                        <button class="action-btn reset" onclick="resetStatus(${item.id})" title="重置状态" ${isLogging ? 'disabled' : ''}>
+                            <i data-lucide="rotate-ccw"></i>
+                        </button>
                         <button class="action-btn edit" onclick="openEditModal(${item.id})" title="编辑">
                             <i data-lucide="pencil"></i>
                         </button>
@@ -137,9 +303,89 @@
                     </div>
                 </td>
             </tr>
-        `).join('');
+        `}).join('');
         
         lucide.createIcons();
+    }
+    
+    // 自动登录
+    async function autoLogin(id) {
+        if (!confirm('确定要自动登录这个账号吗？')) return;
+        
+        try {
+            const res = await fetch(`${API_BASE}/${id}/auto-login`, {
+                method: 'POST'
+            });
+            const result = await res.json();
+            if (result.code === 0) {
+                showToast(result.message, 'success');
+                loadData();
+            } else {
+                showToast(result.message || '操作失败', 'error');
+            }
+        } catch (error) {
+            showToast('操作失败', 'error');
+        }
+    }
+    
+    // 查看日志
+    async function viewLogs(id) {
+        try {
+            const res = await fetch(`${API_BASE}/${id}/logs`);
+            const result = await res.json();
+            
+            if (result.code === 0) {
+                const modal = document.getElementById('log-modal');
+                const title = document.getElementById('log-modal-title');
+                const container = document.getElementById('log-container');
+                
+                title.textContent = `登录日志 - ${result.account}`;
+                
+                if (result.data.length === 0) {
+                    container.innerHTML = '<div class="log-empty"><i data-lucide="inbox"></i><p>暂无日志记录</p></div>';
+                } else {
+                    container.innerHTML = result.data.map(log => `
+                        <div class="log-item">
+                            <span class="log-time">${log.created_at}</span>
+                            <span class="log-status ${log.status}">${log.status}</span>
+                            <span class="log-message">${escapeHtml(log.message)}</span>
+                        </div>
+                    `).join('');
+                }
+                
+                modal.style.display = 'flex';
+                lucide.createIcons();
+            } else {
+                showToast(result.message || '获取日志失败', 'error');
+            }
+        } catch (error) {
+            showToast('获取日志失败', 'error');
+        }
+    }
+    
+    // 关闭日志弹窗
+    function closeLogModal() {
+        document.getElementById('log-modal').style.display = 'none';
+    }
+    
+    // 重置状态
+    async function resetStatus(id) {
+        if (!confirm('确定要重置这个账号的登录状态吗？')) return;
+        
+        try {
+            const res = await fetch(`${API_BASE}/${id}/reset-status`, {
+                method: 'POST'
+            });
+            const result = await res.json();
+            if (result.code === 0) {
+                showToast(result.message, 'success');
+                loadData();
+            } else {
+                showToast(result.message || '操作失败', 'error');
+            }
+        } catch (error) {
+            showToast('操作失败', 'error');
+        }
     }
 
     // 打开添加弹窗

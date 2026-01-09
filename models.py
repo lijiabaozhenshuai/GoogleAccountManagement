@@ -8,6 +8,19 @@ from datetime import datetime
 db = SQLAlchemy()
 
 
+# 登录状态枚举
+LOGIN_STATUS = {
+    'not_logged': '未登录',
+    'logging': '登录中',
+    'success': '登录成功',
+    'password_error': '密码错误',
+    'need_phone': '需要绑定手机号',
+    'need_2fa': '需要2FA验证',
+    'disabled': '账号被禁用',
+    'failed': '登录失败',
+}
+
+
 class Account(db.Model):
     """账号管理模型"""
     __tablename__ = 'accounts'
@@ -17,8 +30,13 @@ class Account(db.Model):
     password = db.Column(db.String(255), nullable=False, comment='密码')
     backup_email = db.Column(db.String(255), nullable=True, comment='辅助邮箱')
     status = db.Column(db.Boolean, default=False, comment='状态：是否使用')
+    login_status = db.Column(db.String(50), default='not_logged', comment='登录状态')
+    browser_env_id = db.Column(db.String(100), nullable=True, comment='浏览器环境ID')
     created_at = db.Column(db.DateTime, default=datetime.now, comment='创建时间')
     updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now, comment='更新时间')
+    
+    # 关联登录日志
+    login_logs = db.relationship('LoginLog', backref='account_ref', lazy='dynamic')
     
     def to_dict(self):
         return {
@@ -27,6 +45,57 @@ class Account(db.Model):
             'password': self.password,
             'backup_email': self.backup_email or '',
             'status': self.status,
+            'login_status': self.login_status or 'not_logged',
+            'login_status_text': LOGIN_STATUS.get(self.login_status, '未知'),
+            'browser_env_id': self.browser_env_id or '',
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else '',
+            'updated_at': self.updated_at.strftime('%Y-%m-%d %H:%M:%S') if self.updated_at else '',
+        }
+
+
+class LoginLog(db.Model):
+    """登录日志模型"""
+    __tablename__ = 'login_logs'
+    
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    account_id = db.Column(db.Integer, db.ForeignKey('accounts.id'), nullable=False, comment='账号ID')
+    browser_env_id = db.Column(db.String(100), nullable=True, comment='浏览器环境ID')
+    action = db.Column(db.String(50), nullable=False, comment='操作类型')
+    status = db.Column(db.String(50), nullable=False, comment='状态')
+    message = db.Column(db.Text, nullable=True, comment='详细信息')
+    created_at = db.Column(db.DateTime, default=datetime.now, comment='创建时间')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'account_id': self.account_id,
+            'browser_env_id': self.browser_env_id or '',
+            'action': self.action,
+            'status': self.status,
+            'message': self.message or '',
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else '',
+        }
+
+
+class BrowserEnv(db.Model):
+    """浏览器环境状态模型（本地记录HubStudio环境使用状态）"""
+    __tablename__ = 'browser_envs'
+    
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    container_code = db.Column(db.String(100), unique=True, nullable=False, comment='环境ID')
+    container_name = db.Column(db.String(255), nullable=True, comment='环境名称')
+    status = db.Column(db.Boolean, default=False, comment='状态：是否已使用')
+    account_id = db.Column(db.Integer, db.ForeignKey('accounts.id'), nullable=True, comment='关联账号ID')
+    created_at = db.Column(db.DateTime, default=datetime.now, comment='创建时间')
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now, comment='更新时间')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'container_code': self.container_code,
+            'container_name': self.container_name or '',
+            'status': self.status,
+            'account_id': self.account_id,
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else '',
             'updated_at': self.updated_at.strftime('%Y-%m-%d %H:%M:%S') if self.updated_at else '',
         }

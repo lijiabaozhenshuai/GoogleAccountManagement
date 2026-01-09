@@ -13,6 +13,10 @@
         </select>
     </div>
     <div class="toolbar-right">
+        <button class="btn btn-primary" onclick="syncBrowserEnvs()">
+            <i data-lucide="cloud-download"></i>
+            <span>同步环境</span>
+        </button>
         <button class="btn btn-outline" onclick="loadBrowsers()">
             <i data-lucide="refresh-cw"></i>
             <span>刷新</span>
@@ -46,6 +50,7 @@
                     <th>环境名称</th>
                     <th>环境ID</th>
                     <th>分组</th>
+                    <th>使用状态</th>
                     <th>代理信息</th>
                     <th>创建时间</th>
                     <th style="width: 100px;">操作</th>
@@ -53,7 +58,7 @@
             </thead>
             <tbody id="browser-table-body">
                 <tr>
-                    <td colspan="7" class="loading-cell">
+                    <td colspan="8" class="loading-cell">
                         <i data-lucide="loader" class="spin"></i>
                         <span>加载中...</span>
                     </td>
@@ -309,13 +314,50 @@ let pageSize = 20;
 let totalCount = 0;
 let searchKeyword = '';
 let selectedGroupCode = '';
+let browserEnvStatus = {}; // 存储本地浏览器环境状态
 
 // 页面加载时初始化
 document.addEventListener('DOMContentLoaded', () => {
     checkApiStatus();
     loadGroups();
-    loadBrowsers();
+    loadLocalBrowserStatus().then(() => loadBrowsers());
 });
+
+// 加载本地浏览器环境状态
+async function loadLocalBrowserStatus() {
+    try {
+        const res = await fetch('/api/browser-envs');
+        const data = await res.json();
+        if (data.code === 0) {
+            browserEnvStatus = {};
+            data.data.forEach(env => {
+                browserEnvStatus[env.container_code] = env;
+            });
+        }
+    } catch (e) {
+        console.error('加载本地环境状态失败:', e);
+    }
+}
+
+// 同步浏览器环境到本地
+async function syncBrowserEnvs() {
+    try {
+        showToast('正在同步环境...', 'info');
+        const res = await fetch('/api/browser-envs/sync', {
+            method: 'POST'
+        });
+        const data = await res.json();
+        if (data.code === 0) {
+            showToast(data.message, 'success');
+            await loadLocalBrowserStatus();
+            loadBrowsers();
+        } else {
+            showToast(data.message || '同步失败', 'error');
+        }
+    } catch (e) {
+        showToast('同步失败: ' + e.message, 'error');
+    }
+}
 
 // 检查API状态
 async function checkApiStatus() {
@@ -359,7 +401,7 @@ async function loadBrowsers() {
     const tbody = document.getElementById('browser-table-body');
     tbody.innerHTML = `
         <tr>
-            <td colspan="7" class="loading-cell">
+            <td colspan="8" class="loading-cell">
                 <i data-lucide="loader" class="spin"></i>
                 <span>加载中...</span>
             </td>
@@ -388,7 +430,7 @@ async function loadBrowsers() {
             if (browsers.length === 0) {
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="7" class="empty-cell">
+                        <td colspan="8" class="empty-cell">
                             <i data-lucide="inbox"></i>
                             <p>暂无数据</p>
                         </td>
@@ -403,12 +445,21 @@ async function loadBrowsers() {
                     const createTime = browser.createTime ? new Date(browser.createTime).toLocaleString('zh-CN') : '-';
                     const groupName = browser.tagName || '-';
                     
+                    // 获取本地环境状态
+                    const localEnv = browserEnvStatus[browser.containerCode];
+                    const isUsed = localEnv && localEnv.status;
+                    const statusClass = isUsed ? 'used' : 'unused';
+                    const statusText = isUsed ? '已使用' : '未使用';
+                    
                     return `
                         <tr>
                             <td>${num}</td>
                             <td><strong>${escapeHtml(browser.containerName || '-')}</strong></td>
                             <td><code class="browser-id">${escapeHtml(browser.containerCode || '-')}</code></td>
                             <td>${escapeHtml(groupName)}</td>
+                            <td>
+                                <span class="status-tag ${statusClass}">${statusText}</span>
+                            </td>
                             <td><span class="proxy-info">${escapeHtml(proxyInfo)}</span></td>
                             <td>${createTime}</td>
                             <td>
@@ -427,7 +478,7 @@ async function loadBrowsers() {
             showToast(data.message || '加载失败', 'error');
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="7" class="empty-cell">
+                    <td colspan="8" class="empty-cell">
                         <i data-lucide="alert-circle"></i>
                         <p>加载失败</p>
                     </td>
@@ -438,7 +489,7 @@ async function loadBrowsers() {
         showToast('加载失败: ' + e.message, 'error');
         tbody.innerHTML = `
             <tr>
-                <td colspan="7" class="empty-cell">
+                <td colspan="8" class="empty-cell">
                     <i data-lucide="alert-circle"></i>
                     <p>加载失败</p>
                 </td>
