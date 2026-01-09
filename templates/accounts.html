@@ -419,6 +419,7 @@
     // 打开编辑弹窗
     async function openEditModal(id) {
         try {
+            // 获取账号数据
             const res = await fetch(API_BASE);
             const data = await res.json();
             const item = data.data.find(i => i.id === id);
@@ -428,6 +429,11 @@
                 return;
             }
             
+            // 获取所有可用的浏览器环境
+            const browsersRes = await fetch('/api/hubstudio/browsers?page_size=1000');
+            const browsersData = await browsersRes.json();
+            const environments = browsersData.data || [];
+            
             const fields = COLUMNS.map(col => `
                 <div class="form-group">
                     <label class="form-label">${COLUMN_LABELS[col]}<span class="required">*</span></label>
@@ -435,9 +441,30 @@
                 </div>
             `).join('');
             
+            // 添加环境ID选择框
+            const envOptions = `
+                <option value="">-- 不选择环境 --</option>
+                ${environments.map(env => {
+                    const displayText = env.containerName 
+                        ? `${escapeHtml(env.containerName)} (${escapeHtml(env.containerCode)})`
+                        : escapeHtml(env.containerCode);
+                    return `
+                        <option value="${escapeHtml(env.containerCode)}" ${item.browser_env_id === env.containerCode ? 'selected' : ''}>
+                            ${displayText}
+                        </option>
+                    `;
+                }).join('')}
+            `;
+            
             showModal('编辑账号', `
                 <form id="edit-form">
                     ${fields}
+                    <div class="form-group">
+                        <label class="form-label">环境ID</label>
+                        <select class="form-input" name="browser_env_id" style="cursor: pointer;">
+                            ${envOptions}
+                        </select>
+                    </div>
                 </form>
             `, async () => {
                 const form = document.getElementById('edit-form');
@@ -445,7 +472,8 @@
                 const updateData = {
                     account: formData.get('account'),
                     password: formData.get('password'),
-                    backup_email: formData.get('backup_email')
+                    backup_email: formData.get('backup_email'),
+                    browser_env_id: formData.get('browser_env_id') || null
                 };
                 
                 try {

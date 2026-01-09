@@ -87,3 +87,80 @@ def get_available_browser_envs_count():
     count = BrowserEnv.query.filter_by(status=False).count()
     return jsonify({'code': 0, 'count': count})
 
+
+@login_bp.route('/test-hubstudio', methods=['POST'])
+def test_hubstudio_connection():
+    """测试 HubStudio API 连接"""
+    from services import hubstudio_service
+    
+    try:
+        # 测试 API 状态
+        print("\n========== 测试 HubStudio 连接 ==========")
+        api_ok = hubstudio_service.check_api_status()
+        print(f"API 状态检查: {'✓ 成功' if api_ok else '✗ 失败'}")
+        
+        if not api_ok:
+            return jsonify({
+                'code': 1, 
+                'message': 'HubStudio API 连接失败，请检查: 1) HubStudio 是否运行 2) API 配置是否正确'
+            })
+        
+        # 获取浏览器列表
+        result = hubstudio_service.get_browsers(page=1, page_size=10)
+        browsers = result.get('browsers', [])
+        total = result.get('total', 0)
+        
+        print(f"浏览器列表获取: ✓ 成功，共 {total} 个环境")
+        
+        if total > 0:
+            print(f"前 {len(browsers)} 个环境:")
+            for browser in browsers[:5]:
+                print(f"  - {browser.get('containerCode')}: {browser.get('containerName')}")
+        
+        # 尝试启动第一个浏览器（仅测试 API，不实际连接）
+        if browsers:
+            test_container = browsers[0].get('containerCode')
+            print(f"\n测试启动浏览器环境: {test_container}")
+            driver = hubstudio_service.open_browser(test_container)
+            
+            if driver:
+                print(f"✓ 浏览器启动成功！")
+                # 关闭测试浏览器
+                driver.quit()
+                hubstudio_service.close_browser(test_container)
+                print(f"✓ 浏览器已关闭")
+                print("========================================\n")
+                
+                return jsonify({
+                    'code': 0,
+                    'message': f'HubStudio 连接测试成功！共 {total} 个浏览器环境',
+                    'data': {
+                        'api_status': 'ok',
+                        'total_browsers': total,
+                        'test_result': 'success'
+                    }
+                })
+            else:
+                print(f"✗ 浏览器启动失败")
+                print("========================================\n")
+                return jsonify({
+                    'code': 1,
+                    'message': '浏览器启动失败，请检查控制台日志查看详细错误'
+                })
+        else:
+            print("⚠ 没有可用的浏览器环境")
+            print("========================================\n")
+            return jsonify({
+                'code': 1,
+                'message': 'HubStudio 连接正常，但没有可用的浏览器环境'
+            })
+            
+    except Exception as e:
+        print(f"✗ 测试过程出错: {str(e)}")
+        print("========================================\n")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'code': 1,
+            'message': f'测试失败: {str(e)}'
+        })

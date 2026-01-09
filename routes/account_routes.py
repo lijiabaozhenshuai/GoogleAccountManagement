@@ -41,6 +41,9 @@ def update_account(id):
     account.password = data.get('password', account.password)
     account.backup_email = data.get('backup_email', account.backup_email)
     account.status = data.get('status', account.status)
+    # 支持修改环境ID
+    if 'browser_env_id' in data:
+        account.browser_env_id = data.get('browser_env_id') or None
     db.session.commit()
     return jsonify({'code': 0, 'message': '更新成功', 'data': account.to_dict()})
 

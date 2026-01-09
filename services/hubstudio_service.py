@@ -86,12 +86,14 @@ def get_browsers(page=1, page_size=20, search='', group_code=''):
 def open_browser(container_code, is_headless=False):
     """打开HubStudio浏览器并返回WebDriver"""
     try:
+        print(f"[HubStudio] 准备启动浏览器环境: {container_code}")
         request_data = {
             "containerCode": container_code,
             "isHeadless": is_headless,
             "isWebDriverReadOnlyMode": False
         }
         
+        print(f"[HubStudio] 发送启动请求到: {HUBSTUDIO_CONFIG['base_url']}/api/v1/browser/start")
         response = requests.post(
             f"{HUBSTUDIO_CONFIG['base_url']}/api/v1/browser/start",
             headers=get_hubstudio_headers(),
@@ -99,26 +101,55 @@ def open_browser(container_code, is_headless=False):
             timeout=30
         )
         
+        print(f"[HubStudio] API 响应状态码: {response.status_code}")
+        
         if response.status_code != 200:
-            raise Exception(f"API请求失败: HTTP {response.status_code}")
+            error_msg = f"API请求失败: HTTP {response.status_code}"
+            print(f"[HubStudio错误] {error_msg}")
+            raise Exception(error_msg)
         
         data = response.json()
+        print(f"[HubStudio] API 响应数据: code={data.get('code')}, msg={data.get('msg')}")
+        
         if data.get("code") != 0:
-            raise Exception(f"启动浏览器失败: {data.get('msg', '未知错误')}")
+            error_msg = f"启动浏览器失败: {data.get('msg', '未知错误')}"
+            print(f"[HubStudio错误] {error_msg}")
+            raise Exception(error_msg)
         
         debug_info = data.get("data", {})
         debugging_port = debug_info.get("debuggingPort")
         webdriver_path = debug_info.get("webdriver")
         
+        print(f"[HubStudio] 调试端口: {debugging_port}, WebDriver路径: {webdriver_path}")
+        
+        if not debugging_port or not webdriver_path:
+            error_msg = f"响应数据不完整: debuggingPort={debugging_port}, webdriver={webdriver_path}"
+            print(f"[HubStudio错误] {error_msg}")
+            raise Exception(error_msg)
+        
         chrome_options = webdriver.ChromeOptions()
         chrome_options.add_experimental_option("debuggerAddress", f"localhost:{debugging_port}")
         
+        print(f"[HubStudio] 正在连接到浏览器...")
         chrome_service = Service(webdriver_path)
         driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
+        print(f"[HubStudio] 浏览器连接成功！")
         return driver
         
+    except requests.exceptions.ConnectionError as e:
+        error_msg = f"无法连接到 HubStudio API ({HUBSTUDIO_CONFIG['base_url']}): {str(e)}"
+        print(f"[HubStudio连接错误] {error_msg}")
+        print(f"[HubStudio提示] 请检查: 1) HubStudio 是否正在运行 2) API 地址是否正确")
+        return None
+    except requests.exceptions.Timeout as e:
+        error_msg = f"连接 HubStudio API 超时: {str(e)}"
+        print(f"[HubStudio超时错误] {error_msg}")
+        return None
     except Exception as e:
-        print(f"打开浏览器失败: {e}")
+        error_msg = f"打开浏览器失败: {str(e)}"
+        print(f"[HubStudio错误] {error_msg}")
+        import traceback
+        traceback.print_exc()
         return None
 
 
