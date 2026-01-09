@@ -1,0 +1,524 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- 顶部操作栏 -->
+<div class="toolbar">
+    <div class="toolbar-left">
+        <div class="search-box">
+            <i data-lucide="search" class="search-icon"></i>
+            <input type="text" id="search-input" class="search-input" placeholder="搜索环境名称..." onkeyup="handleSearch(event)">
+        </div>
+        <select id="group-filter" class="toolbar-select" onchange="filterByGroup()">
+            <option value="">全部分组</option>
+        </select>
+    </div>
+    <div class="toolbar-right">
+        <button class="btn btn-outline" onclick="loadBrowsers()">
+            <i data-lucide="refresh-cw"></i>
+            <span>刷新</span>
+        </button>
+    </div>
+</div>
+
+<!-- API状态 -->
+<div class="status-bar" id="api-status" style="margin-bottom: 20px;">
+    <div class="status-item">
+        <span class="status-label">HubStudio API:</span>
+        <span class="status-value" id="hubstudio-status">
+            <i data-lucide="loader" class="spin"></i> 检测中...
+        </span>
+    </div>
+    <div class="status-item">
+        <span class="status-label">浏览器总数:</span>
+        <span class="status-value" id="browser-count">
+            <strong>0</strong>
+        </span>
+    </div>
+</div>
+
+<!-- 数据表格 -->
+<div class="table-card">
+    <div class="table-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="width: 60px;">序号</th>
+                    <th>环境名称</th>
+                    <th>环境ID</th>
+                    <th>分组</th>
+                    <th>代理信息</th>
+                    <th>创建时间</th>
+                    <th style="width: 100px;">操作</th>
+                </tr>
+            </thead>
+            <tbody id="browser-table-body">
+                <tr>
+                    <td colspan="7" class="loading-cell">
+                        <i data-lucide="loader" class="spin"></i>
+                        <span>加载中...</span>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 分页 -->
+<div class="pagination" id="pagination">
+    <div class="pagination-info">
+        共 <strong id="total-count">0</strong> 条记录
+    </div>
+    <div class="pagination-controls" id="pagination-controls">
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+.toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    gap: 12px;
+}
+
+.toolbar-left,
+.toolbar-right {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.search-box {
+    position: relative;
+    width: 260px;
+}
+
+.search-box .search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px !important;
+    height: 16px !important;
+    color: var(--text-muted);
+    pointer-events: none;
+}
+
+.search-box .search-input {
+    width: 100%;
+    padding: 10px 14px 10px 38px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--input-bg);
+    color: var(--text-primary);
+    font-size: 14px;
+    outline: none;
+    transition: all 0.2s;
+    box-sizing: border-box;
+}
+
+.search-box .search-input:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.toolbar-select {
+    width: 180px;
+    padding: 10px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--input-bg);
+    color: var(--text-primary);
+    font-size: 14px;
+    outline: none;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.toolbar-select:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.status-bar {
+    display: flex;
+    gap: 24px;
+    padding: 12px 16px;
+    background: var(--card-bg);
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+}
+
+.status-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.status-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.status-value {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.status-value.online {
+    color: #10b981;
+}
+
+.status-value.offline {
+    color: #ef4444;
+}
+
+.status-value i {
+    width: 14px;
+    height: 14px;
+}
+
+.spin {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.loading-cell {
+    text-align: center;
+    padding: 40px 20px !important;
+    color: var(--text-muted);
+}
+
+.loading-cell i {
+    width: 20px;
+    height: 20px;
+    margin-right: 8px;
+}
+
+.empty-cell {
+    text-align: center;
+    padding: 40px 20px !important;
+    color: var(--text-muted);
+}
+
+.empty-cell i {
+    width: 32px;
+    height: 32px;
+    margin-bottom: 8px;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 20px;
+    padding: 16px;
+    background: var(--card-bg);
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+}
+
+.pagination-info {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.pagination-info strong {
+    color: var(--primary-color);
+}
+
+.pagination-controls {
+    display: flex;
+    gap: 8px;
+}
+
+.pagination-btn {
+    padding: 6px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--card-bg);
+    color: var(--text-primary);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.pagination-btn:hover:not(:disabled) {
+    background: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+}
+
+.pagination-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.pagination-btn.active {
+    background: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+}
+
+.proxy-info {
+    font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.browser-id {
+    font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.action-links {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+}
+
+.action-link {
+    color: var(--primary-color);
+    text-decoration: none;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.action-link:hover {
+    text-decoration: underline;
+}
+</style>
+
+<script>
+let currentPage = 1;
+let pageSize = 20;
+let totalCount = 0;
+let searchKeyword = '';
+let selectedGroupCode = '';
+
+// 页面加载时初始化
+document.addEventListener('DOMContentLoaded', () => {
+    checkApiStatus();
+    loadGroups();
+    loadBrowsers();
+});
+
+// 检查API状态
+async function checkApiStatus() {
+    const statusEl = document.getElementById('hubstudio-status');
+    try {
+        const res = await fetch('/api/hubstudio/status');
+        const data = await res.json();
+        if (data.code === 0 && data.data.connected) {
+            statusEl.innerHTML = '<i data-lucide="check-circle"></i> 已连接';
+            statusEl.className = 'status-value online';
+        } else {
+            statusEl.innerHTML = '<i data-lucide="x-circle"></i> 未连接';
+            statusEl.className = 'status-value offline';
+        }
+    } catch (e) {
+        statusEl.innerHTML = '<i data-lucide="x-circle"></i> 连接失败';
+        statusEl.className = 'status-value offline';
+    }
+    lucide.createIcons();
+}
+
+// 加载分组列表
+async function loadGroups() {
+    const selectEl = document.getElementById('group-filter');
+    try {
+        const res = await fetch('/api/hubstudio/groups');
+        const data = await res.json();
+        if (data.code === 0 && data.data.length > 0) {
+            selectEl.innerHTML = '<option value="">全部分组</option>' + 
+                data.data.map(g => 
+                    `<option value="${g.tagCode}">${escapeHtml(g.tagName)}</option>`
+                ).join('');
+        }
+    } catch (e) {
+        console.error('加载分组失败:', e);
+    }
+}
+
+// 加载浏览器列表
+async function loadBrowsers() {
+    const tbody = document.getElementById('browser-table-body');
+    tbody.innerHTML = `
+        <tr>
+            <td colspan="7" class="loading-cell">
+                <i data-lucide="loader" class="spin"></i>
+                <span>加载中...</span>
+            </td>
+        </tr>
+    `;
+    lucide.createIcons();
+
+    try {
+        const params = new URLSearchParams({
+            page: currentPage,
+            page_size: pageSize,
+            search: searchKeyword,
+            group_code: selectedGroupCode
+        });
+
+        const res = await fetch(`/api/hubstudio/browsers?${params}`);
+        const data = await res.json();
+
+        if (data.code === 0) {
+            const browsers = data.data || [];
+            totalCount = data.total || 0;
+            
+            document.getElementById('browser-count').innerHTML = `<strong>${totalCount}</strong>`;
+            document.getElementById('total-count').textContent = totalCount;
+
+            if (browsers.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="empty-cell">
+                            <i data-lucide="inbox"></i>
+                            <p>暂无数据</p>
+                        </td>
+                    </tr>
+                `;
+            } else {
+                tbody.innerHTML = browsers.map((browser, index) => {
+                    const num = (currentPage - 1) * pageSize + index + 1;
+                    const proxyInfo = browser.proxyServer && browser.proxyPort 
+                        ? `${browser.proxyServer}:${browser.proxyPort}` 
+                        : '-';
+                    const createTime = browser.createTime ? new Date(browser.createTime).toLocaleString('zh-CN') : '-';
+                    const groupName = browser.tagName || '-';
+                    
+                    return `
+                        <tr>
+                            <td>${num}</td>
+                            <td><strong>${escapeHtml(browser.containerName || '-')}</strong></td>
+                            <td><code class="browser-id">${escapeHtml(browser.containerCode || '-')}</code></td>
+                            <td>${escapeHtml(groupName)}</td>
+                            <td><span class="proxy-info">${escapeHtml(proxyInfo)}</span></td>
+                            <td>${createTime}</td>
+                            <td>
+                                <div class="action-links">
+                                    <a class="action-link" onclick="copyBrowserId('${escapeHtml(browser.containerCode || '')}')">复制ID</a>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+            
+            renderPagination();
+            lucide.createIcons();
+        } else {
+            showToast(data.message || '加载失败', 'error');
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="7" class="empty-cell">
+                        <i data-lucide="alert-circle"></i>
+                        <p>加载失败</p>
+                    </td>
+                </tr>
+            `;
+        }
+    } catch (e) {
+        showToast('加载失败: ' + e.message, 'error');
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="7" class="empty-cell">
+                    <i data-lucide="alert-circle"></i>
+                    <p>加载失败</p>
+                </td>
+            </tr>
+        `;
+    }
+    
+    lucide.createIcons();
+}
+
+// 渲染分页
+function renderPagination() {
+    const controls = document.getElementById('pagination-controls');
+    const totalPages = Math.ceil(totalCount / pageSize);
+    
+    if (totalPages <= 1) {
+        controls.innerHTML = '';
+        return;
+    }
+    
+    let html = `
+        <button class="pagination-btn" onclick="changePage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>
+            上一页
+        </button>
+    `;
+    
+    // 显示页码
+    for (let i = 1; i <= totalPages; i++) {
+        if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {
+            html += `
+                <button class="pagination-btn ${i === currentPage ? 'active' : ''}" onclick="changePage(${i})">
+                    ${i}
+                </button>
+            `;
+        } else if (i === currentPage - 3 || i === currentPage + 3) {
+            html += '<span style="padding: 0 8px; color: var(--text-muted);">...</span>';
+        }
+    }
+    
+    html += `
+        <button class="pagination-btn" onclick="changePage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>
+            下一页
+        </button>
+    `;
+    
+    controls.innerHTML = html;
+}
+
+// 切换页面
+function changePage(page) {
+    const totalPages = Math.ceil(totalCount / pageSize);
+    if (page < 1 || page > totalPages || page === currentPage) return;
+    currentPage = page;
+    loadBrowsers();
+}
+
+// 搜索处理
+function handleSearch(event) {
+    if (event.key === 'Enter') {
+        searchKeyword = event.target.value.trim();
+        currentPage = 1;
+        loadBrowsers();
+    }
+}
+
+// 按分组筛选
+function filterByGroup() {
+    selectedGroupCode = document.getElementById('group-filter').value;
+    currentPage = 1;
+    loadBrowsers();
+}
+
+// 复制浏览器ID
+function copyBrowserId(id) {
+    navigator.clipboard.writeText(id).then(() => {
+        showToast('已复制环境ID', 'success');
+    }).catch(() => {
+        showToast('复制失败', 'error');
+    });
+}
+</script>
+{% endblock %}
+

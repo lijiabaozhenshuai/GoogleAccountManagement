@@ -22,17 +22,24 @@ MENU_CONFIG = [
             {"name": "节点管理", "icon": "server", "url": "/nodes", "order": 3},
         ]
     },
-    # 后续可以在这里添加更多一级菜单
-    # {
-    #     "name": "系统设置",
-    #     "icon": "settings",
-    #     "url": None,
-    #     "order": 2,
-    #     "children": [
-    #         {"name": "用户管理", "icon": "users", "url": "/users", "order": 1},
-    #     ]
-    # },
+    {
+        "name": "浏览器管理",
+        "icon": "chrome",
+        "url": None,
+        "order": 2,
+        "children": [
+            {"name": "批量创建窗口", "icon": "plus-square", "url": "/browser-create", "order": 1},
+            {"name": "浏览器窗口列表", "icon": "layout-grid", "url": "/browser-list", "order": 2},
+        ]
+    },
 ]
+
+# Hubstudio API 配置
+HUBSTUDIO_CONFIG = {
+    "base_url": "http://localhost:6873",
+    "app_id": "202601091459192924876173312",
+    "app_secret": "MIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQCUoDjNJ5nfphNcrMP0SrXnx5d4/4tZO0dYDvTJstk5wCgjoUDGb2WMSOGiXc5uC4vxQdZcnQZ8ae35qaI2+l4ARVpwFE5Fgir9RxTPcMrvRqvQh8rzWLp2z9wCXGOL7ZljDmgbCfrt5oLM/960OVXExy4duzJHgZ1QRTajkgH5hCRfbpJyI3G8MYlBIUhu6pKkHqUWvSLTttP1EO8XPLtQ4DeczaMA2oknI2M5SURVVhtE0AcFxrriJlp6rBmUwQuBCGlx+M6g5gNPy8MFHpZkZWra7b3bKQqe8nVN/q+EypsQDS+IeM77heAQl/9+hp7kJaBYBhZz6i0d02LyS79PAgMBAAECggEAP1/GeKw/L59YODcu4zcMM8Xmr+B/YdAmDsVp2auadsaaFv9GaJbNfTECjUJkqIXh6UDCkAEg5+IfaErN8ZV2ibUI6CuwaHEltZQeqomU7sx6rNOKVZNrBwiA7rzIcb0hn5xgBc+OoOyer50XMFAWY27vGhxdRyJcmwK4Vq0GjIcFzUu8l/NEPpNADmS94KUDQDpiWjoE74EJz2LQKOeTr3pAXQ7MddX5UbyHR1dtUTgWHXnw+aUMhBumjmXUO7IyTis4ZzFMWPGOh0G7Vg/roIQkm9TIqk9xiBlPKizvFT4ugKb+gVHfIiFCNyZI4P918iBlrzj2c52j88t0TUEhMQKBgQDZTzosC8MHpezCOE3wnM+Wkz4kk9b2h5899Z1v5N6fV7zVnYN6p+HZrANekSIZ1q7rBogiZ1+g+afviC+ot7PTuwDFns1kRhJ2OhFMt1qRlkOGWazo1qpkbLKDMgjDq+xxmYzEC6frH0QUYUEoe2pTRemjs9awzaQPBwZZwp+WFwKBgQCvFnTktmzodAaDuUr7Nct4KnBnjTOgZaaxoduyUR99TC6R1RWKxmvasgJWPp0PZBnqeBXVgdRvOx0wA9emUkd0ESKFlMTDXlqrWqJH/Qdc8BD4qwz1dIycnkRQJBOEgthR1hcwDujn2sBEZyNRqglVO0tCfw83zaV6D14klHAbiQKBgQCwnUOaKLUJskEKWNh/hfLxXhpTgBRlqTQzFzwthMWqm5RNyQbi2S8lyjey1CHy/hiLy3M5Ausl2cIzW2vgo+zzWDj4ZGhp5sl6bRdCUoK5cHbQ6nEti8pQdEdheXjGDyTL7xAJBbAj1/Vs2t4qGKQBqgCJm9ARQhDkZcEzkopBYQKBgQCqLAhm9wt5DrP6ORCwgoOFArKHYsznu4S9pxRSBti1PmMQ6Grsm5feUh9FVcvvVpp9skN+ZZZkma7vqPxjMhsyqyjDbmmjfURgwVFy6HHMmaPVHOMWejXkT0sUHUw/AbFgMNYOpp8mIg23Lgs85yf1CBFIyxeuZBjOPruAkCk6CQKBgQDQiEM92ojiO1sYODgslKgALYWN3EFmlszVr8TIVky1J262+wRusxyBTB/Rpuu4frDAgd8eqEPomZ/QCYzeyJGdq7FtOoXQO0PdqaSatqsq4OuWgSHi8wseLVNHBrmAAhIF38RK8Dc3GragwdtuspKj9nVAUfBdkuMPaZc1hp0vGA=="
+}
 
 # 数据库配置
 # SQLite 配置（已弃用）

@@ -1,0 +1,690 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- 创建配置区域 -->
+<div class="create-config-section">
+    <div class="config-card">
+        <div class="config-header">
+            <h3><i data-lucide="settings"></i> 创建配置</h3>
+        </div>
+        <div class="config-body">
+            <div class="config-row">
+                <div class="config-item">
+                    <label class="config-label">创建数量</label>
+                    <input type="number" id="create-count" class="form-input" value="1" min="1" max="100">
+                    <span class="config-hint">可用节点: <strong id="available-nodes">0</strong> 个</span>
+                </div>
+                <div class="config-item">
+                    <label class="config-label">环境分组</label>
+                    <select id="group-select" class="form-select">
+                        <option value="">加载中...</option>
+                    </select>
+                    <span class="config-hint">💡 提示：如需创建新分组，请先在 HubStudio 客户端中操作</span>
+                </div>
+                <div class="config-item">
+                    <label class="config-label">内核版本</label>
+                    <select id="core-version" class="form-select">
+                        <option value="random">随机选择</option>
+                        <option value="131">Chrome 131</option>
+                        <option value="130">Chrome 130</option>
+                        <option value="128">Chrome 128</option>
+                        <option value="126">Chrome 126</option>
+                        <option value="124">Chrome 124</option>
+                        <option value="122">Chrome 122</option>
+                        <option value="117">Chrome 117</option>
+                        <option value="113">Chrome 113</option>
+                        <option value="112">Chrome 112</option>
+                    </select>
+                </div>
+            </div>
+            <div class="config-actions">
+                <button class="btn btn-primary btn-lg" id="start-btn" onclick="startCreate()">
+                    <i data-lucide="play"></i>
+                    <span>开始创建</span>
+                </button>
+                <button class="btn btn-outline" onclick="refreshData()">
+                    <i data-lucide="refresh-cw"></i>
+                    <span>刷新数据</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- API状态 -->
+<div class="status-bar" id="api-status">
+    <div class="status-item">
+        <span class="status-label">HubStudio API:</span>
+        <span class="status-value" id="hubstudio-status">
+            <i data-lucide="loader" class="spin"></i> 检测中...
+        </span>
+    </div>
+</div>
+
+<!-- 进度区域 -->
+<div class="progress-section" id="progress-section" style="display: none;">
+    <div class="progress-header">
+        <h3><i data-lucide="activity"></i> 创建进度</h3>
+        <span class="progress-stats">
+            <span class="stat success"><i data-lucide="check-circle"></i> <span id="success-count">0</span></span>
+            <span class="stat failed"><i data-lucide="x-circle"></i> <span id="failed-count">0</span></span>
+            <span class="stat total"><i data-lucide="layers"></i> <span id="current-count">0</span>/<span id="total-count">0</span></span>
+        </span>
+    </div>
+    <div class="progress-bar-container">
+        <div class="progress-bar" id="progress-bar" style="width: 0%"></div>
+    </div>
+</div>
+
+<!-- 日志区域 -->
+<div class="log-section">
+    <div class="log-header">
+        <h3><i data-lucide="terminal"></i> 操作日志</h3>
+        <button class="btn btn-sm btn-outline" onclick="clearLogs()">
+            <i data-lucide="trash-2"></i>
+            <span>清空</span>
+        </button>
+    </div>
+    <div class="log-container" id="log-container">
+        <div class="log-empty">
+            <i data-lucide="file-text"></i>
+            <p>暂无日志</p>
+        </div>
+    </div>
+</div>
+
+<!-- 创建结果摘要 -->
+<div class="result-section" id="result-section" style="display: none;">
+    <div class="result-header">
+        <h3><i data-lucide="check-circle"></i> 创建完成</h3>
+        <button class="btn btn-sm btn-primary" onclick="exportResults()">
+            <i data-lucide="download"></i>
+            <span>导出环境ID</span>
+        </button>
+    </div>
+    <div class="result-summary">
+        <p>✅ 批量创建任务已完成！成功创建 <strong id="final-success-count">0</strong> 个环境。</p>
+        <p>💡 可前往 <a href="/browser-list" style="color: var(--primary-color); text-decoration: underline;">浏览器窗口列表</a> 查看所有窗口。</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+.create-config-section {
+    margin-bottom: 20px;
+}
+
+.config-card {
+    background: var(--card-bg);
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+}
+
+.config-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-color);
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.05) 100%);
+}
+
+.config-header h3 {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 16px;
+    color: var(--text-primary);
+}
+
+.config-header h3 i {
+    width: 20px;
+    height: 20px;
+    color: var(--primary-color);
+}
+
+.config-body {
+    padding: 20px;
+}
+
+.config-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.config-item {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.config-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.config-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.config-hint strong {
+    color: var(--primary-color);
+}
+
+.form-select {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--input-bg);
+    color: var(--text-primary);
+    font-size: 14px;
+    outline: none;
+    transition: all 0.2s;
+}
+
+.form-select:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.config-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.btn-lg {
+    padding: 12px 24px;
+    font-size: 15px;
+}
+
+.status-bar {
+    display: flex;
+    gap: 24px;
+    padding: 12px 16px;
+    background: var(--card-bg);
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    margin-bottom: 20px;
+}
+
+.status-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.status-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.status-value {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.status-value.online {
+    color: #10b981;
+}
+
+.status-value.offline {
+    color: #ef4444;
+}
+
+.status-value i {
+    width: 14px;
+    height: 14px;
+}
+
+.spin {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.progress-section {
+    background: var(--card-bg);
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.progress-header h3 {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 15px;
+}
+
+.progress-header h3 i {
+    width: 18px;
+    height: 18px;
+    color: var(--primary-color);
+}
+
+.progress-stats {
+    display: flex;
+    gap: 16px;
+}
+
+.progress-stats .stat {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.progress-stats .stat i {
+    width: 14px;
+    height: 14px;
+}
+
+.progress-stats .stat.success {
+    color: #10b981;
+}
+
+.progress-stats .stat.failed {
+    color: #ef4444;
+}
+
+.progress-stats .stat.total {
+    color: var(--text-secondary);
+}
+
+.progress-bar-container {
+    height: 8px;
+    background: var(--border-color);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #6366f1, #8b5cf6);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+.log-section {
+    background: var(--card-bg);
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    margin-bottom: 20px;
+    overflow: hidden;
+}
+
+.log-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
+    background: rgba(0, 0, 0, 0.02);
+}
+
+.log-header h3 {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+}
+
+.log-header h3 i {
+    width: 16px;
+    height: 16px;
+    color: var(--text-secondary);
+}
+
+.log-container {
+    height: 240px;
+    overflow-y: auto;
+    padding: 12px;
+    background: #1a1a2e;
+    font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+    font-size: 12px;
+}
+
+.log-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #666;
+}
+
+.log-empty i {
+    width: 32px;
+    height: 32px;
+    margin-bottom: 8px;
+    opacity: 0.5;
+}
+
+.log-line {
+    padding: 4px 0;
+    line-height: 1.5;
+    color: #a0aec0;
+}
+
+.log-line.info {
+    color: #63b3ed;
+}
+
+.log-line.success {
+    color: #68d391;
+}
+
+.log-line.error {
+    color: #fc8181;
+}
+
+.log-line.warning {
+    color: #f6e05e;
+}
+
+.log-time {
+    color: #718096;
+    margin-right: 8px;
+}
+
+.result-section {
+    background: var(--card-bg);
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+}
+
+.result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.result-header h3 {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+}
+
+.result-header h3 i {
+    width: 16px;
+    height: 16px;
+    color: var(--primary-color);
+}
+
+.result-summary {
+    padding: 20px;
+    text-align: center;
+}
+
+.result-summary p {
+    margin: 12px 0;
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.result-summary strong {
+    color: var(--primary-color);
+    font-size: 18px;
+}
+</style>
+
+<script>
+let isCreating = false;
+let createdResults = [];
+
+// 页面加载时初始化
+document.addEventListener('DOMContentLoaded', () => {
+    checkApiStatus();
+    loadGroups();
+    loadAvailableNodes();
+});
+
+// 检查API状态
+async function checkApiStatus() {
+    const statusEl = document.getElementById('hubstudio-status');
+    try {
+        const res = await fetch('/api/hubstudio/status');
+        const data = await res.json();
+        if (data.code === 0 && data.data.connected) {
+            statusEl.innerHTML = '<i data-lucide="check-circle"></i> 已连接';
+            statusEl.className = 'status-value online';
+        } else {
+            statusEl.innerHTML = '<i data-lucide="x-circle"></i> 未连接';
+            statusEl.className = 'status-value offline';
+        }
+    } catch (e) {
+        statusEl.innerHTML = '<i data-lucide="x-circle"></i> 连接失败';
+        statusEl.className = 'status-value offline';
+    }
+    lucide.createIcons();
+}
+
+// 加载分组列表
+async function loadGroups() {
+    const selectEl = document.getElementById('group-select');
+    try {
+        const res = await fetch('/api/hubstudio/groups');
+        const data = await res.json();
+        if (data.code === 0 && data.data.length > 0) {
+            selectEl.innerHTML = '<option value="">默认（不分组）</option>' + 
+                data.data.map(g => 
+                    `<option value="${g.tagCode}">${escapeHtml(g.tagName)}</option>`
+                ).join('');
+        } else {
+            selectEl.innerHTML = '<option value="">默认（不分组）</option>';
+        }
+    } catch (e) {
+        selectEl.innerHTML = '<option value="">默认（不分组）</option>';
+    }
+}
+
+// 加载可用节点数量
+async function loadAvailableNodes() {
+    try {
+        const res = await fetch('/api/nodes/available-count');
+        const data = await res.json();
+        document.getElementById('available-nodes').textContent = data.count || 0;
+        document.getElementById('create-count').max = data.count || 0;
+    } catch (e) {
+        document.getElementById('available-nodes').textContent = '0';
+    }
+}
+
+// 刷新数据
+function refreshData() {
+    checkApiStatus();
+    loadGroups();
+    loadAvailableNodes();
+    addLog('info', '数据已刷新');
+}
+
+// 开始创建
+async function startCreate() {
+    if (isCreating) {
+        showToast('正在创建中，请稍候', 'warning');
+        return;
+    }
+
+    const count = parseInt(document.getElementById('create-count').value);
+    const groupCode = document.getElementById('group-select').value;
+    const coreVersion = document.getElementById('core-version').value;
+
+    if (!count || count < 1) {
+        showToast('请输入有效的创建数量', 'error');
+        return;
+    }
+
+    // groupCode 可以为空，表示不分组
+
+    // 检查可用节点
+    const availableNodes = parseInt(document.getElementById('available-nodes').textContent);
+    if (count > availableNodes) {
+        showToast(`可用节点不足，当前仅有 ${availableNodes} 个未使用节点`, 'error');
+        return;
+    }
+
+    isCreating = true;
+    createdResults = [];
+    
+    // 更新UI
+    document.getElementById('start-btn').disabled = true;
+    document.getElementById('progress-section').style.display = 'block';
+    document.getElementById('result-section').style.display = 'none';
+    document.getElementById('success-count').textContent = '0';
+    document.getElementById('failed-count').textContent = '0';
+    document.getElementById('current-count').textContent = '0';
+    document.getElementById('total-count').textContent = count;
+    document.getElementById('progress-bar').style.width = '0%';
+
+    addLog('info', `开始批量创建 ${count} 个浏览器窗口...`);
+
+    try {
+        const res = await fetch('/api/hubstudio/batch-create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                count: count,
+                group_code: groupCode,
+                core_version: coreVersion
+            })
+        });
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let successCount = 0;
+        let failedCount = 0;
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const text = decoder.decode(value);
+            const lines = text.split('\n').filter(line => line.startsWith('data: '));
+
+            for (const line of lines) {
+                try {
+                    const data = JSON.parse(line.substring(6));
+                    handleCreateEvent(data);
+                    
+                    if (data.type === 'progress') {
+                        if (data.success) {
+                            successCount++;
+                        } else {
+                            failedCount++;
+                        }
+                        const current = successCount + failedCount;
+                        document.getElementById('success-count').textContent = successCount;
+                        document.getElementById('failed-count').textContent = failedCount;
+                        document.getElementById('current-count').textContent = current;
+                        document.getElementById('progress-bar').style.width = `${(current / count) * 100}%`;
+                    }
+                } catch (e) {
+                    console.error('Parse error:', e);
+                }
+            }
+        }
+
+        addLog('success', `创建完成！成功: ${successCount}, 失败: ${failedCount}`);
+        document.getElementById('result-section').style.display = 'block';
+        document.getElementById('final-success-count').textContent = successCount;
+        loadAvailableNodes(); // 刷新可用节点数
+
+    } catch (e) {
+        addLog('error', `创建失败: ${e.message}`);
+    } finally {
+        isCreating = false;
+        document.getElementById('start-btn').disabled = false;
+    }
+}
+
+// 处理创建事件
+function handleCreateEvent(data) {
+    if (data.type === 'log') {
+        addLog(data.level, data.message);
+    } else if (data.type === 'progress') {
+        createdResults.push(data);
+    }
+}
+
+// 添加日志
+function addLog(level, message) {
+    const container = document.getElementById('log-container');
+    const emptyEl = container.querySelector('.log-empty');
+    if (emptyEl) {
+        emptyEl.remove();
+    }
+
+    const time = new Date().toLocaleTimeString();
+    const logLine = document.createElement('div');
+    logLine.className = `log-line ${level}`;
+    logLine.innerHTML = `<span class="log-time">[${time}]</span>${escapeHtml(message)}`;
+    container.appendChild(logLine);
+    container.scrollTop = container.scrollHeight;
+}
+
+// 清空日志
+function clearLogs() {
+    const container = document.getElementById('log-container');
+    container.innerHTML = `
+        <div class="log-empty">
+            <i data-lucide="file-text"></i>
+            <p>暂无日志</p>
+        </div>
+    `;
+    lucide.createIcons();
+}
+
+// 导出结果
+function exportResults() {
+    if (createdResults.length === 0) {
+        showToast('暂无可导出的结果', 'warning');
+        return;
+    }
+
+    const successResults = createdResults.filter(r => r.success);
+    if (successResults.length === 0) {
+        showToast('没有成功创建的环境', 'warning');
+        return;
+    }
+
+    const content = successResults.map(r => r.container_code).join('\n');
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `HUB环境ID_${new Date().toISOString().slice(0,10)}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    showToast(`已导出 ${successResults.length} 个环境ID`, 'success');
+}
+</script>
+{% endblock %}
+

@@ -2,12 +2,16 @@
 """
 谷歌账号管理系统 - 主应用
 """
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify, send_file, Response
 from models import db, Account, Phone, Node
-from config import MENU_CONFIG, DATABASE_URI, APP_CONFIG
+from config import MENU_CONFIG, DATABASE_URI, APP_CONFIG, HUBSTUDIO_CONFIG
 import pandas as pd
 from io import BytesIO
 from datetime import datetime
+import requests
+import json
+import random
+import time
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URI
@@ -56,6 +60,18 @@ def phones_page():
 def nodes_page():
     """节点管理页面"""
     return render_template('nodes.html', page_title='节点管理', current_url='/nodes')
+
+
+@app.route('/browser-create')
+def browser_create_page():
+    """批量创建浏览器窗口页面"""
+    return render_template('browser_create.html', page_title='批量创建窗口', current_url='/browser-create')
+
+
+@app.route('/browser-list')
+def browser_list_page():
+    """浏览器窗口列表页面"""
+    return render_template('browser_list.html', page_title='浏览器窗口列表', current_url='/browser-list')
 
 
 # ==================== 账号管理 API ====================
@@ -425,6 +441,211 @@ def download_nodes_template():
     output.seek(0)
     return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                      as_attachment=True, download_name='节点导入模板.xlsx')
+
+
+@app.route('/api/nodes/available-count', methods=['GET'])
+def get_available_nodes_count():
+    """获取可用（未使用）节点数量"""
+    count = Node.query.filter_by(status=False).count()
+    return jsonify({'code': 0, 'count': count})
+
+
+# ==================== HubStudio API ====================
+
+def get_hubstudio_headers():
+    """获取HubStudio API请求头"""
+    return {
+        "Content-Type": "application/json",
+        "app-id": HUBSTUDIO_CONFIG["app_id"],
+        "app-secret": HUBSTUDIO_CONFIG["app_secret"]
+    }
+
+
+@app.route('/api/hubstudio/status', methods=['GET'])
+def check_hubstudio_status():
+    """检查HubStudio API连接状态"""
+    try:
+        response = requests.post(
+            f"{HUBSTUDIO_CONFIG['base_url']}/api/v1/group/list",
+            headers=get_hubstudio_headers(),
+            timeout=5
+        )
+        if response.status_code == 200:
+            result = response.json()
+            if result.get("code") == 0:
+                return jsonify({'code': 0, 'data': {'connected': True}})
+        return jsonify({'code': 0, 'data': {'connected': False}})
+    except Exception as e:
+        return jsonify({'code': 0, 'data': {'connected': False, 'error': str(e)}})
+
+
+@app.route('/api/hubstudio/groups', methods=['GET'])
+def get_hubstudio_groups():
+    """获取HubStudio分组列表"""
+    try:
+        response = requests.post(
+            f"{HUBSTUDIO_CONFIG['base_url']}/api/v1/group/list",
+            headers=get_hubstudio_headers(),
+            timeout=10
+        )
+        if response.status_code == 200:
+            result = response.json()
+            if result.get("code") == 0:
+                groups = result.get("data", [])
+                return jsonify({'code': 0, 'data': groups})
+        return jsonify({'code': 1, 'message': '获取分组失败', 'data': []})
+    except Exception as e:
+        return jsonify({'code': 1, 'message': str(e), 'data': []})
+
+
+@app.route('/api/hubstudio/browsers', methods=['GET'])
+def get_hubstudio_browsers():
+    """获取HubStudio浏览器窗口列表"""
+    try:
+        page = request.args.get('page', 1, type=int)
+        page_size = request.args.get('page_size', 20, type=int)
+        search = request.args.get('search', '', type=str)
+        group_code = request.args.get('group_code', '', type=str)
+        
+        # 构建请求数据
+        request_data = {
+            "page": page,
+            "limit": page_size
+        }
+        
+        # 添加搜索条件
+        if search:
+            request_data["containerName"] = search
+        if group_code:
+            request_data["tagCode"] = group_code
+        
+        response = requests.post(
+            f"{HUBSTUDIO_CONFIG['base_url']}/api/v1/env/list",
+            headers=get_hubstudio_headers(),
+            json=request_data,
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            if result.get("code") == 0:
+                data = result.get("data", {})
+                browsers = data.get("list", [])
+                total = data.get("total", 0)
+                return jsonify({
+                    'code': 0,
+                    'data': browsers,
+                    'total': total,
+                    'page': page,
+                    'page_size': page_size
+                })
+        return jsonify({'code': 1, 'message': '获取浏览器列表失败', 'data': []})
+    except Exception as e:
+        return jsonify({'code': 1, 'message': str(e), 'data': []})
+
+
+@app.route('/api/hubstudio/batch-create', methods=['POST'])
+def batch_create_browser():
+    """批量创建HubStudio浏览器窗口"""
+    data = request.json
+    count = data.get('count', 1)
+    group_code = data.get('group_code', '')
+    core_version = data.get('core_version', 'random')
+    
+    # 可选内核版本
+    available_cores = [112, 113, 117, 122, 124, 126, 128, 130, 131]
+    
+    def generate():
+        # 获取未使用的节点
+        with app.app_context():
+            nodes = Node.query.filter_by(status=False).limit(count).all()
+            if len(nodes) < count:
+                yield f"data: {json.dumps({'type': 'log', 'level': 'error', 'message': f'可用节点不足，需要{count}个，仅有{len(nodes)}个'})}\n\n"
+                return
+            
+            # 获取分组名称
+            group_name = ''
+            if group_code:  # 只有当用户选择了分组时才查询分组名称
+                try:
+                    response = requests.post(
+                        f"{HUBSTUDIO_CONFIG['base_url']}/api/v1/group/list",
+                        headers=get_hubstudio_headers(),
+                        timeout=10
+                    )
+                    groups = response.json().get("data", [])
+                    group_name = next((g['tagName'] for g in groups if g['tagCode'] == group_code), '')
+                except:
+                    group_name = ''
+            
+            # 生成环境名称前缀
+            env_prefix = datetime.now().strftime("%m%d%H%M")
+            
+            yield f"data: {json.dumps({'type': 'log', 'level': 'info', 'message': f'开始创建，环境前缀: {env_prefix}'})}\n\n"
+            
+            for idx, node in enumerate(nodes, 1):
+                try:
+                    # 确定内核版本
+                    if core_version == 'random':
+                        current_core = random.choice(available_cores)
+                    else:
+                        current_core = int(core_version)
+                    
+                    # 构建环境名称
+                    env_name = f"{env_prefix}_{idx}"
+                    proxy_info = f"{node.ip}:{node.port}"
+                    
+                    yield f"data: {json.dumps({'type': 'log', 'level': 'info', 'message': f'正在创建环境 #{idx}: {env_name} (内核: {current_core})'})}\n\n"
+                    
+                    # 构建请求数据
+                    request_data = {
+                        "containerName": env_name,
+                        "tagName": group_name,
+                        "asDynamicType": 1,
+                        "proxyTypeName": "Socks5",
+                        "proxyServer": node.ip,
+                        "proxyPort": node.port,
+                        "proxyAccount": node.username,
+                        "proxyPassword": node.password,
+                        "coreVersion": current_core
+                    }
+                    
+                    # 发送创建请求
+                    response = requests.post(
+                        f"{HUBSTUDIO_CONFIG['base_url']}/api/v1/env/create",
+                        headers=get_hubstudio_headers(),
+                        json=request_data,
+                        timeout=30
+                    )
+                    
+                    if response.status_code == 200:
+                        result = response.json()
+                        if result.get("code") == 0:
+                            container_code = result.get("data", {}).get("containerCode", "")
+                            
+                            # 标记节点为已使用
+                            node.status = True
+                            db.session.commit()
+                            
+                            yield f"data: {json.dumps({'type': 'log', 'level': 'success', 'message': f'环境 #{idx} 创建成功，ID: {container_code}'})}\n\n"
+                            yield f"data: {json.dumps({'type': 'progress', 'index': idx, 'success': True, 'env_name': env_name, 'container_code': container_code, 'proxy': proxy_info})}\n\n"
+                        else:
+                            error_msg = result.get('msg', '未知错误')
+                            yield f"data: {json.dumps({'type': 'log', 'level': 'error', 'message': f'环境 #{idx} 创建失败: {error_msg}'})}\n\n"
+                            yield f"data: {json.dumps({'type': 'progress', 'index': idx, 'success': False, 'env_name': env_name, 'container_code': '', 'proxy': proxy_info, 'error': error_msg})}\n\n"
+                    else:
+                        yield f"data: {json.dumps({'type': 'log', 'level': 'error', 'message': f'环境 #{idx} 创建失败: HTTP {response.status_code}'})}\n\n"
+                        yield f"data: {json.dumps({'type': 'progress', 'index': idx, 'success': False, 'env_name': env_name, 'container_code': '', 'proxy': proxy_info, 'error': f'HTTP {response.status_code}'})}\n\n"
+                    
+                    # 添加延时避免频率限制
+                    time.sleep(random.uniform(1, 2))
+                    
+                except Exception as e:
+                    yield f"data: {json.dumps({'type': 'log', 'level': 'error', 'message': f'环境 #{idx} 创建异常: {str(e)}'})}\n\n"
+                    yield f"data: {json.dumps({'type': 'progress', 'index': idx, 'success': False, 'env_name': '', 'container_code': '', 'proxy': f'{node.ip}:{node.port}', 'error': str(e)})}\n\n"
+            
+            yield f"data: {json.dumps({'type': 'log', 'level': 'info', 'message': '批量创建任务完成'})}\n\n"
+    
+    return Response(generate(), mimetype='text/event-stream')
 
 
 if __name__ == '__main__':
