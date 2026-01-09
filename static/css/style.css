@@ -301,6 +301,7 @@ body {
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-sm);
     overflow: hidden;
+    border: 1px solid var(--border-color);
 }
 
 .data-table {
@@ -322,6 +323,15 @@ body {
     color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    border-right: 1px solid var(--border-color);
+}
+
+.data-table th:last-child {
+    border-right: none;
+}
+
+.data-table td {
+    border-right: 1px solid transparent; /* 保持间距一致性 */
 }
 
 .data-table tbody tr:hover {
@@ -765,6 +775,77 @@ body {
     border-radius: var(--radius-sm);
 }
 
+/* ==================== 分页组件 ==================== */
+.pagination-container {
+    position: sticky;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 24px;
+    background: var(--content-bg);
+    border-top: 1px solid var(--border-color);
+    box-shadow: 0 -4px 10px rgba(0, 0, 0, 0.05);
+    z-index: 10;
+    margin-top: 20px;
+    margin-bottom: -24px; /* 抵消 content-body 的 padding */
+    margin-left: -32px;  /* 抵消 content-body 的 padding */
+    margin-right: -32px; /* 抵消 content-body 的 padding */
+}
+
+.pagination-info {
+    font-size: 14px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.pagination-info span {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.pagination-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    justify-content: center;
+}
+
+.page-numbers {
+    display: flex;
+    gap: 4px;
+}
+
+.pagination-controls .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.pagination-size {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.form-select-sm {
+    padding: 6px 12px;
+    font-size: 14px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--content-bg);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.form-select-sm:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
 /* ==================== 响应式适配 ==================== */
 @media (max-width: 768px) {
     .sidebar {
@@ -796,6 +877,24 @@ body {
     
     .toolbar-right {
         margin-left: 0;
+    }
+    
+    .pagination-container {
+        flex-direction: column;
+        gap: 12px;
+        position: static;
+        margin: 20px -16px -16px -16px;
+    }
+    
+    .pagination-info,
+    .pagination-size {
+        width: 100%;
+        text-align: center;
+    }
+    
+    .pagination-controls {
+        width: 100%;
+        overflow-x: auto;
     }
 }
 

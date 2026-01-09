@@ -12,9 +12,26 @@ from datetime import datetime
 
 @phone_bp.route('', methods=['GET'])
 def get_phones():
-    """获取手机号列表"""
-    phones = Phone.query.order_by(Phone.id.desc()).all()
-    return jsonify({'code': 0, 'data': [p.to_dict() for p in phones]})
+    """获取手机号列表（支持分页）"""
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('page_size', 20, type=int)
+    
+    # 限制每页最大数量
+    page_size = min(page_size, 100)
+    
+    # 分页查询
+    pagination = Phone.query.order_by(Phone.id.desc()).paginate(
+        page=page, per_page=page_size, error_out=False
+    )
+    
+    return jsonify({
+        'code': 0,
+        'data': [p.to_dict() for p in pagination.items],
+        'total': pagination.total,
+        'page': page,
+        'page_size': page_size,
+        'total_pages': pagination.pages
+    })
 
 
 @phone_bp.route('', methods=['POST'])

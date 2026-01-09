@@ -55,6 +55,7 @@
                 <th class="checkbox-cell">
                     <input type="checkbox" class="checkbox" id="select-all" onchange="toggleSelectAll(this)">
                 </th>
+                <th style="width: 60px; text-align: center;">序号</th>
                 <th>手机号</th>
                 <th>接码URL</th>
                 <th>过期时间</th>
@@ -72,6 +73,30 @@
         <p>暂无数据</p>
     </div>
 </div>
+
+<!-- 分页组件 -->
+<div class="pagination-container" id="pagination-container" style="display: none;">
+    <div class="pagination-info">
+        共 <span id="total-count">0</span> 条记录，第 <span id="current-page">1</span> / <span id="total-pages">1</span> 页
+    </div>
+    <div class="pagination-controls">
+        <button class="btn btn-sm btn-outline" id="first-page" onclick="goToPage(1)">首页</button>
+        <button class="btn btn-sm btn-outline" id="prev-page" onclick="goToPage(currentPage - 1)">上一页</button>
+        <div class="page-numbers" id="page-numbers"></div>
+        <button class="btn btn-sm btn-outline" id="next-page" onclick="goToPage(currentPage + 1)">下一页</button>
+        <button class="btn btn-sm btn-outline" id="last-page" onclick="goToPage(totalPages)">末页</button>
+    </div>
+    <div class="pagination-size">
+        每页显示：
+        <select class="form-select-sm" id="page-size" onchange="changePageSize(this.value)">
+            <option value="10">10</option>
+            <option value="20" selected>20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+        </select>
+        条
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -83,6 +108,12 @@
         sms_url: '接码URL',
         expire_time: '过期时间'
     };
+    
+    // 分页变量
+    let currentPage = 1;
+    let pageSize = 20;
+    let totalPages = 1;
+    let totalCount = 0;
 
     // 页面加载时获取数据
     document.addEventListener('DOMContentLoaded', () => {
@@ -92,12 +123,72 @@
     // 加载数据
     async function loadData() {
         try {
-            const res = await fetch(API_BASE);
+            const res = await fetch(`${API_BASE}?page=${currentPage}&page_size=${pageSize}`);
             const data = await res.json();
-            renderTable(data.data);
+            if (data.code === 0) {
+                totalCount = data.total;
+                totalPages = data.total_pages;
+                currentPage = data.page;
+                renderTable(data.data);
+                renderPagination();
+            }
         } catch (error) {
             showToast('加载数据失败', 'error');
         }
+    }
+    
+    // 渲染分页
+    function renderPagination() {
+        const paginationContainer = document.getElementById('pagination-container');
+        const pageNumbers = document.getElementById('page-numbers');
+        
+        if (totalCount === 0) {
+            paginationContainer.style.display = 'none';
+            return;
+        }
+        
+        paginationContainer.style.display = 'flex';
+        document.getElementById('total-count').textContent = totalCount;
+        document.getElementById('current-page').textContent = currentPage;
+        document.getElementById('total-pages').textContent = totalPages;
+        
+        // 渲染页码按钮
+        pageNumbers.innerHTML = '';
+        const maxPages = 5; // 最多显示5个页码
+        let startPage = Math.max(1, currentPage - Math.floor(maxPages / 2));
+        let endPage = Math.min(totalPages, startPage + maxPages - 1);
+        
+        if (endPage - startPage < maxPages - 1) {
+            startPage = Math.max(1, endPage - maxPages + 1);
+        }
+        
+        for (let i = startPage; i <= endPage; i++) {
+            const btn = document.createElement('button');
+            btn.className = `btn btn-sm ${i === currentPage ? 'btn-primary' : 'btn-outline'}`;
+            btn.textContent = i;
+            btn.onclick = () => goToPage(i);
+            pageNumbers.appendChild(btn);
+        }
+        
+        // 更新按钮状态
+        document.getElementById('first-page').disabled = currentPage === 1;
+        document.getElementById('prev-page').disabled = currentPage === 1;
+        document.getElementById('next-page').disabled = currentPage === totalPages;
+        document.getElementById('last-page').disabled = currentPage === totalPages;
+    }
+    
+    // 跳转到指定页
+    function goToPage(page) {
+        if (page < 1 || page > totalPages || page === currentPage) return;
+        currentPage = page;
+        loadData();
+    }
+    
+    // 改变每页显示数量
+    function changePageSize(size) {
+        pageSize = parseInt(size);
+        currentPage = 1; // 重置到第一页
+        loadData();
     }
 
     // 渲染表格
@@ -112,11 +203,16 @@
         }
         
         emptyState.style.display = 'none';
-        tbody.innerHTML = items.map(item => `
+        tbody.innerHTML = items.map((item, index) => {
+            // 计算当前页的显示序号
+            const displayIndex = (currentPage - 1) * pageSize + (index + 1);
+            
+            return `
             <tr data-id="${item.id}">
                 <td class="checkbox-cell">
                     <input type="checkbox" class="checkbox row-checkbox" value="${item.id}" onchange="updateSelection()">
                 </td>
+                <td style="text-align: center; color: var(--text-secondary);">${displayIndex}</td>
                 <td>${escapeHtml(item.phone_number)}</td>
                 <td>${escapeHtml(item.sms_url)}</td>
                 <td>${item.expire_time || '-'}</td>
@@ -137,7 +233,7 @@
                     </div>
                 </td>
             </tr>
-        `).join('');
+        `}).join('');
         
         lucide.createIcons();
     }
