@@ -57,6 +57,7 @@
                 </th>
                 <th>手机号</th>
                 <th>接码URL</th>
+                <th>过期时间</th>
                 <th>状态</th>
                 <th>创建时间</th>
                 <th class="actions-cell">操作</th>
@@ -76,10 +77,11 @@
 {% block scripts %}
 <script>
     const API_BASE = '/api/phones';
-    const COLUMNS = ['phone_number', 'sms_url'];
+    const COLUMNS = ['phone_number', 'sms_url', 'expire_time'];
     const COLUMN_LABELS = {
         phone_number: '手机号',
-        sms_url: '接码URL'
+        sms_url: '接码URL',
+        expire_time: '过期时间'
     };
 
     // 页面加载时获取数据
@@ -117,6 +119,7 @@
                 </td>
                 <td>${escapeHtml(item.phone_number)}</td>
                 <td>${escapeHtml(item.sms_url)}</td>
+                <td>${item.expire_time || '-'}</td>
                 <td>
                     <span class="status-tag ${item.status ? 'used' : 'unused'}">
                         ${item.status ? '已使用' : '未使用'}
@@ -141,16 +144,20 @@
 
     // 打开添加弹窗
     function openAddModal() {
-        const fields = COLUMNS.map(col => `
-            <div class="form-group">
-                <label class="form-label">${COLUMN_LABELS[col]}<span class="required">*</span></label>
-                <input type="text" class="form-input" name="${col}" required>
-            </div>
-        `).join('');
-        
         showModal('添加手机号', `
             <form id="add-form">
-                ${fields}
+                <div class="form-group">
+                    <label class="form-label">${COLUMN_LABELS.phone_number}<span class="required">*</span></label>
+                    <input type="text" class="form-input" name="phone_number" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">${COLUMN_LABELS.sms_url}<span class="required">*</span></label>
+                    <input type="text" class="form-input" name="sms_url" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">${COLUMN_LABELS.expire_time}</label>
+                    <input type="date" class="form-input" name="expire_time">
+                </div>
                 <div class="form-group">
                     <label class="form-label">状态</label>
                     <div class="form-switch">
@@ -165,9 +172,11 @@
         `, async () => {
             const form = document.getElementById('add-form');
             const formData = new FormData(form);
+            const expireTime = formData.get('expire_time');
             const data = {
                 phone_number: formData.get('phone_number'),
                 sms_url: formData.get('sms_url'),
+                expire_time: expireTime ? expireTime + ' 23:59:59' : '',
                 status: form.querySelector('[name="status"]').checked
             };
             
@@ -203,16 +212,23 @@
                 return;
             }
             
-            const fields = COLUMNS.map(col => `
-                <div class="form-group">
-                    <label class="form-label">${COLUMN_LABELS[col]}<span class="required">*</span></label>
-                    <input type="text" class="form-input" name="${col}" value="${escapeHtml(item[col])}" required>
-                </div>
-            `).join('');
+            // 过期时间已经是日期格式
+            const expireTimeValue = item.expire_time || '';
             
             showModal('编辑手机号', `
                 <form id="edit-form">
-                    ${fields}
+                    <div class="form-group">
+                        <label class="form-label">${COLUMN_LABELS.phone_number}<span class="required">*</span></label>
+                        <input type="text" class="form-input" name="phone_number" value="${escapeHtml(item.phone_number)}" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">${COLUMN_LABELS.sms_url}<span class="required">*</span></label>
+                        <input type="text" class="form-input" name="sms_url" value="${escapeHtml(item.sms_url)}" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">${COLUMN_LABELS.expire_time}</label>
+                        <input type="date" class="form-input" name="expire_time" value="${expireTimeValue}">
+                    </div>
                     <div class="form-group">
                         <label class="form-label">状态</label>
                         <div class="form-switch">
@@ -227,9 +243,11 @@
             `, async () => {
                 const form = document.getElementById('edit-form');
                 const formData = new FormData(form);
+                const expireTime = formData.get('expire_time');
                 const updateData = {
                     phone_number: formData.get('phone_number'),
                     sms_url: formData.get('sms_url'),
+                    expire_time: expireTime ? expireTime + ' 23:59:59' : '',
                     status: form.querySelector('[name="status"]').checked
                 };
                 
@@ -368,6 +386,7 @@
                     <tbody>
                         <tr><td>手机号</td><td>手机号码</td><td>是</td></tr>
                         <tr><td>接码URL</td><td>接收验证码的URL</td><td>是</td></tr>
+                        <tr><td>过期时间</td><td>格式：2026-12-31</td><td>否</td></tr>
                         <tr><td>状态</td><td>填写"已使用"或"未使用"</td><td>否</td></tr>
                     </tbody>
                 </table>

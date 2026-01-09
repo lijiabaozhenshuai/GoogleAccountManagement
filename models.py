@@ -39,6 +39,7 @@ class Phone(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     phone_number = db.Column(db.String(50), nullable=False, comment='手机号')
     sms_url = db.Column(db.String(500), nullable=True, comment='接码URL')
+    expire_time = db.Column(db.DateTime, nullable=True, comment='过期时间')
     status = db.Column(db.Boolean, default=False, comment='状态：是否使用')
     created_at = db.Column(db.DateTime, default=datetime.now, comment='创建时间')
     updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now, comment='更新时间')
@@ -48,6 +49,7 @@ class Phone(db.Model):
             'id': self.id,
             'phone_number': self.phone_number,
             'sms_url': self.sms_url or '',
+            'expire_time': self.expire_time.strftime('%Y-%m-%d') if self.expire_time else '',
             'status': self.status,
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else '',
             'updated_at': self.updated_at.strftime('%Y-%m-%d %H:%M:%S') if self.updated_at else '',

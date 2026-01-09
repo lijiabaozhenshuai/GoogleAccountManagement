@@ -194,9 +194,16 @@ def get_phones():
 def add_phone():
     """添加手机号"""
     data = request.json
+    expire_time = None
+    if data.get('expire_time'):
+        try:
+            expire_time = datetime.strptime(data.get('expire_time'), '%Y-%m-%d %H:%M:%S')
+        except:
+            pass
     phone = Phone(
         phone_number=data.get('phone_number', ''),
         sms_url=data.get('sms_url', ''),
+        expire_time=expire_time,
         status=data.get('status', False)
     )
     db.session.add(phone)
@@ -212,6 +219,14 @@ def update_phone(id):
     phone.phone_number = data.get('phone_number', phone.phone_number)
     phone.sms_url = data.get('sms_url', phone.sms_url)
     phone.status = data.get('status', phone.status)
+    if 'expire_time' in data:
+        if data.get('expire_time'):
+            try:
+                phone.expire_time = datetime.strptime(data.get('expire_time'), '%Y-%m-%d %H:%M:%S')
+            except:
+                pass
+        else:
+            phone.expire_time = None
     db.session.commit()
     return jsonify({'code': 0, 'message': '更新成功', 'data': phone.to_dict()})
 
@@ -252,6 +267,7 @@ def export_phones():
     data = [{
         '手机号': p.phone_number,
         '接码URL': p.sms_url,
+        '过期时间': p.expire_time.strftime('%Y-%m-%d') if p.expire_time else '',
         '状态': '已使用' if p.status else '未使用'
     } for p in phones]
     df = pd.DataFrame(data)
@@ -272,9 +288,28 @@ def import_phones():
     df = pd.read_excel(file)
     count = 0
     for _, row in df.iterrows():
+        expire_time = None
+        if '过期时间' in row and pd.notna(row.get('过期时间')):
+            try:
+                expire_val = row.get('过期时间')
+                if isinstance(expire_val, str):
+                    expire_val = expire_val.strip()
+                    # 尝试解析日期格式
+                    if len(expire_val) == 10:  # 格式: 2026-12-31
+                        expire_time = datetime.strptime(expire_val, '%Y-%m-%d')
+                    else:  # 格式: 2026-12-31 23:59:59
+                        expire_time = datetime.strptime(expire_val, '%Y-%m-%d %H:%M:%S')
+                elif isinstance(expire_val, pd.Timestamp):
+                    expire_time = expire_val.to_pydatetime()
+                elif hasattr(expire_val, 'date'):  # datetime.date 或 datetime.datetime 对象
+                    expire_time = datetime.combine(expire_val, datetime.min.time())
+            except Exception as e:
+                print(f"解析过期时间失败: {expire_val}, 错误: {e}")
+                pass
         phone = Phone(
             phone_number=str(row.get('手机号', '')),
             sms_url=str(row.get('接码URL', '')),
+            expire_time=expire_time,
             status=row.get('状态', '') == '已使用'
         )
         db.session.add(phone)
@@ -289,6 +324,7 @@ def download_phones_template():
     data = [{
         '手机号': '13800138000',
         '接码URL': 'https://sms.example.com/receive',
+        '过期时间': '2026-12-31',
         '状态': '未使用'
     }]
     df = pd.DataFrame(data)
