@@ -32,14 +32,6 @@
 <div class="batch-bar" id="batch-bar">
     <span class="selected-count">已选择 <span id="selected-count">0</span> 条</span>
     <div class="batch-actions">
-        <button class="btn btn-sm btn-success" onclick="batchUpdateStatus(true)">
-            <i data-lucide="check"></i>
-            <span>标记已使用</span>
-        </button>
-        <button class="btn btn-sm btn-warning" onclick="batchUpdateStatus(false)">
-            <i data-lucide="x"></i>
-            <span>标记未使用</span>
-        </button>
         <button class="btn btn-sm btn-danger" onclick="batchDelete()">
             <i data-lucide="trash-2"></i>
             <span>批量删除</span>
@@ -60,7 +52,6 @@
                 <th>辅助邮箱</th>
                 <th>登录状态</th>
                 <th>环境ID</th>
-                <th>使用状态</th>
                 <th>创建时间</th>
                 <th class="actions-cell">操作</th>
             </tr>
@@ -277,11 +268,6 @@
                     </span>
                 </td>
                 <td class="env-id-cell" title="${escapeHtml(item.browser_env_id || '')}">${escapeHtml(item.browser_env_id || '-')}</td>
-                <td>
-                    <span class="status-tag ${item.status ? 'used' : 'unused'}">
-                        ${item.status ? '已使用' : '未使用'}
-                    </span>
-                </td>
                 <td>${item.created_at}</td>
                 <td class="actions-cell">
                     <div class="action-btns">
@@ -400,16 +386,6 @@
         showModal('添加账号', `
             <form id="add-form">
                 ${fields}
-                <div class="form-group">
-                    <label class="form-label">状态</label>
-                    <div class="form-switch">
-                        <label class="switch">
-                            <input type="checkbox" name="status">
-                            <span class="switch-slider"></span>
-                        </label>
-                        <span>已使用</span>
-                    </div>
-                </div>
             </form>
         `, async () => {
             const form = document.getElementById('add-form');
@@ -417,8 +393,7 @@
             const data = {
                 account: formData.get('account'),
                 password: formData.get('password'),
-                backup_email: formData.get('backup_email'),
-                status: form.querySelector('[name="status"]').checked
+                backup_email: formData.get('backup_email')
             };
             
             try {
@@ -463,16 +438,6 @@
             showModal('编辑账号', `
                 <form id="edit-form">
                     ${fields}
-                    <div class="form-group">
-                        <label class="form-label">状态</label>
-                        <div class="form-switch">
-                            <label class="switch">
-                                <input type="checkbox" name="status" ${item.status ? 'checked' : ''}>
-                                <span class="switch-slider"></span>
-                            </label>
-                            <span>已使用</span>
-                        </div>
-                    </div>
                 </form>
             `, async () => {
                 const form = document.getElementById('edit-form');
@@ -480,8 +445,7 @@
                 const updateData = {
                     account: formData.get('account'),
                     password: formData.get('password'),
-                    backup_email: formData.get('backup_email'),
-                    status: form.querySelector('[name="status"]').checked
+                    backup_email: formData.get('backup_email')
                 };
                 
                 try {
@@ -624,7 +588,6 @@
                         <tr><td>账号</td><td>Google账号邮箱</td><td>是</td></tr>
                         <tr><td>密码</td><td>账号密码</td><td>是</td></tr>
                         <tr><td>辅助邮箱</td><td>备用邮箱地址</td><td>否</td></tr>
-                        <tr><td>状态</td><td>填写"已使用"或"未使用"</td><td>否</td></tr>
                     </tbody>
                 </table>
                 <p class="rules-note">提示：可先下载模板，按模板格式填写后导入。</p>
