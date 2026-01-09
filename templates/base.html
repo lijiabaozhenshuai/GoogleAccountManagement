@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - 谷歌账号管理系统</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- 侧边导航栏 -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i data-lucide="shield-check"></i>
+                    <span>账号管理系统</span>
+                </div>
+            </div>
+            <nav class="sidebar-nav">
+                {% for menu_item in menu_config %}
+                <div class="nav-group">
+                    {% if menu_item.children %}
+                    <div class="nav-group-title">
+                        <i data-lucide="{{ menu_item.icon }}"></i>
+                        <span>{{ menu_item.name }}</span>
+                        <i data-lucide="chevron-down" class="nav-arrow"></i>
+                    </div>
+                    <ul class="nav-submenu">
+                        {% for child in menu_item.children %}
+                        <li>
+                            <a href="{{ child.url }}" class="nav-link {% if current_url == child.url %}active{% endif %}">
+                                <i data-lucide="{{ child.icon }}"></i>
+                                <span>{{ child.name }}</span>
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <a href="{{ menu_item.url }}" class="nav-link {% if current_url == menu_item.url %}active{% endif %}">
+                        <i data-lucide="{{ menu_item.icon }}"></i>
+                        <span>{{ menu_item.name }}</span>
+                    </a>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </nav>
+        </aside>
+
+        <!-- 主内容区域 -->
+        <main class="main-content">
+            <header class="content-header">
+                <h1>{{ page_title }}</h1>
+            </header>
+            <div class="content-body">
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+
+    <!-- 模态框容器 -->
+    <div id="modal-container"></div>
+
+    <!-- 消息提示容器 -->
+    <div id="toast-container"></div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script>
+        lucide.createIcons();
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
+
+

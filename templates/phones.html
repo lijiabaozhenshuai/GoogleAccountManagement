@@ -1,0 +1,383 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- 工具栏 -->
+<div class="toolbar">
+    <div class="toolbar-left">
+        <button class="btn btn-primary" onclick="openAddModal()">
+            <i data-lucide="plus"></i>
+            <span>添加手机号</span>
+        </button>
+    </div>
+    <div class="toolbar-right">
+        <button class="btn btn-outline" onclick="showImportRules()">
+            <i data-lucide="help-circle"></i>
+            <span>导入说明</span>
+        </button>
+        <div class="file-upload">
+            <input type="file" id="import-file" accept=".xlsx,.xls" onchange="importData(this)">
+            <label for="import-file" class="file-upload-label">
+                <i data-lucide="upload"></i>
+                <span>导入</span>
+            </label>
+        </div>
+        <button class="btn btn-outline" onclick="exportData()">
+            <i data-lucide="download"></i>
+            <span>导出</span>
+        </button>
+    </div>
+</div>
+
+<!-- 批量操作栏 -->
+<div class="batch-bar" id="batch-bar">
+    <span class="selected-count">已选择 <span id="selected-count">0</span> 条</span>
+    <div class="batch-actions">
+        <button class="btn btn-sm btn-success" onclick="batchUpdateStatus(true)">
+            <i data-lucide="check"></i>
+            <span>标记已使用</span>
+        </button>
+        <button class="btn btn-sm btn-warning" onclick="batchUpdateStatus(false)">
+            <i data-lucide="x"></i>
+            <span>标记未使用</span>
+        </button>
+        <button class="btn btn-sm btn-danger" onclick="batchDelete()">
+            <i data-lucide="trash-2"></i>
+            <span>批量删除</span>
+        </button>
+    </div>
+</div>
+
+<!-- 数据表格 -->
+<div class="table-container">
+    <table class="data-table" id="data-table">
+        <thead>
+            <tr>
+                <th class="checkbox-cell">
+                    <input type="checkbox" class="checkbox" id="select-all" onchange="toggleSelectAll(this)">
+                </th>
+                <th>手机号</th>
+                <th>接码URL</th>
+                <th>状态</th>
+                <th>创建时间</th>
+                <th class="actions-cell">操作</th>
+            </tr>
+        </thead>
+        <tbody id="table-body">
+            <!-- 数据动态加载 -->
+        </tbody>
+    </table>
+    <div class="empty-state" id="empty-state" style="display: none;">
+        <i data-lucide="inbox"></i>
+        <p>暂无数据</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const API_BASE = '/api/phones';
+    const COLUMNS = ['phone_number', 'sms_url'];
+    const COLUMN_LABELS = {
+        phone_number: '手机号',
+        sms_url: '接码URL'
+    };
+
+    // 页面加载时获取数据
+    document.addEventListener('DOMContentLoaded', () => {
+        loadData();
+    });
+
+    // 加载数据
+    async function loadData() {
+        try {
+            const res = await fetch(API_BASE);
+            const data = await res.json();
+            renderTable(data.data);
+        } catch (error) {
+            showToast('加载数据失败', 'error');
+        }
+    }
+
+    // 渲染表格
+    function renderTable(items) {
+        const tbody = document.getElementById('table-body');
+        const emptyState = document.getElementById('empty-state');
+        
+        if (!items || items.length === 0) {
+            tbody.innerHTML = '';
+            emptyState.style.display = 'flex';
+            return;
+        }
+        
+        emptyState.style.display = 'none';
+        tbody.innerHTML = items.map(item => `
+            <tr data-id="${item.id}">
+                <td class="checkbox-cell">
+                    <input type="checkbox" class="checkbox row-checkbox" value="${item.id}" onchange="updateSelection()">
+                </td>
+                <td>${escapeHtml(item.phone_number)}</td>
+                <td>${escapeHtml(item.sms_url)}</td>
+                <td>
+                    <span class="status-tag ${item.status ? 'used' : 'unused'}">
+                        ${item.status ? '已使用' : '未使用'}
+                    </span>
+                </td>
+                <td>${item.created_at}</td>
+                <td class="actions-cell">
+                    <div class="action-btns">
+                        <button class="action-btn edit" onclick="openEditModal(${item.id})" title="编辑">
+                            <i data-lucide="pencil"></i>
+                        </button>
+                        <button class="action-btn delete" onclick="deleteItem(${item.id})" title="删除">
+                            <i data-lucide="trash-2"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `).join('');
+        
+        lucide.createIcons();
+    }
+
+    // 打开添加弹窗
+    function openAddModal() {
+        const fields = COLUMNS.map(col => `
+            <div class="form-group">
+                <label class="form-label">${COLUMN_LABELS[col]}<span class="required">*</span></label>
+                <input type="text" class="form-input" name="${col}" required>
+            </div>
+        `).join('');
+        
+        showModal('添加手机号', `
+            <form id="add-form">
+                ${fields}
+                <div class="form-group">
+                    <label class="form-label">状态</label>
+                    <div class="form-switch">
+                        <label class="switch">
+                            <input type="checkbox" name="status">
+                            <span class="switch-slider"></span>
+                        </label>
+                        <span>已使用</span>
+                    </div>
+                </div>
+            </form>
+        `, async () => {
+            const form = document.getElementById('add-form');
+            const formData = new FormData(form);
+            const data = {
+                phone_number: formData.get('phone_number'),
+                sms_url: formData.get('sms_url'),
+                status: form.querySelector('[name="status"]').checked
+            };
+            
+            try {
+                const res = await fetch(API_BASE, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const result = await res.json();
+                if (result.code === 0) {
+                    showToast('添加成功', 'success');
+                    closeModal();
+                    loadData();
+                } else {
+                    showToast(result.message || '添加失败', 'error');
+                }
+            } catch (error) {
+                showToast('添加失败', 'error');
+            }
+        });
+    }
+
+    // 打开编辑弹窗
+    async function openEditModal(id) {
+        try {
+            const res = await fetch(API_BASE);
+            const data = await res.json();
+            const item = data.data.find(i => i.id === id);
+            
+            if (!item) {
+                showToast('未找到数据', 'error');
+                return;
+            }
+            
+            const fields = COLUMNS.map(col => `
+                <div class="form-group">
+                    <label class="form-label">${COLUMN_LABELS[col]}<span class="required">*</span></label>
+                    <input type="text" class="form-input" name="${col}" value="${escapeHtml(item[col])}" required>
+                </div>
+            `).join('');
+            
+            showModal('编辑手机号', `
+                <form id="edit-form">
+                    ${fields}
+                    <div class="form-group">
+                        <label class="form-label">状态</label>
+                        <div class="form-switch">
+                            <label class="switch">
+                                <input type="checkbox" name="status" ${item.status ? 'checked' : ''}>
+                                <span class="switch-slider"></span>
+                            </label>
+                            <span>已使用</span>
+                        </div>
+                    </div>
+                </form>
+            `, async () => {
+                const form = document.getElementById('edit-form');
+                const formData = new FormData(form);
+                const updateData = {
+                    phone_number: formData.get('phone_number'),
+                    sms_url: formData.get('sms_url'),
+                    status: form.querySelector('[name="status"]').checked
+                };
+                
+                try {
+                    const res = await fetch(`${API_BASE}/${id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(updateData)
+                    });
+                    const result = await res.json();
+                    if (result.code === 0) {
+                        showToast('更新成功', 'success');
+                        closeModal();
+                        loadData();
+                    } else {
+                        showToast(result.message || '更新失败', 'error');
+                    }
+                } catch (error) {
+                    showToast('更新失败', 'error');
+                }
+            });
+        } catch (error) {
+            showToast('加载数据失败', 'error');
+        }
+    }
+
+    // 删除
+    async function deleteItem(id) {
+        if (!confirm('确定要删除这条记录吗？')) return;
+        
+        try {
+            const res = await fetch(`${API_BASE}/${id}`, { method: 'DELETE' });
+            const result = await res.json();
+            if (result.code === 0) {
+                showToast('删除成功', 'success');
+                loadData();
+            } else {
+                showToast(result.message || '删除失败', 'error');
+            }
+        } catch (error) {
+            showToast('删除失败', 'error');
+        }
+    }
+
+    // 批量删除
+    async function batchDelete() {
+        const ids = getSelectedIds();
+        if (ids.length === 0) return;
+        
+        if (!confirm(`确定要删除选中的 ${ids.length} 条记录吗？`)) return;
+        
+        try {
+            const res = await fetch(`${API_BASE}/batch-delete`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids })
+            });
+            const result = await res.json();
+            if (result.code === 0) {
+                showToast(result.message, 'success');
+                loadData();
+                updateSelection();
+            } else {
+                showToast(result.message || '删除失败', 'error');
+            }
+        } catch (error) {
+            showToast('删除失败', 'error');
+        }
+    }
+
+    // 批量更新状态
+    async function batchUpdateStatus(status) {
+        const ids = getSelectedIds();
+        if (ids.length === 0) return;
+        
+        try {
+            const res = await fetch(`${API_BASE}/batch-status`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids, status })
+            });
+            const result = await res.json();
+            if (result.code === 0) {
+                showToast(result.message, 'success');
+                loadData();
+                updateSelection();
+            } else {
+                showToast(result.message || '更新失败', 'error');
+            }
+        } catch (error) {
+            showToast('更新失败', 'error');
+        }
+    }
+
+    // 导出
+    function exportData() {
+        window.location.href = `${API_BASE}/export`;
+    }
+
+    // 导入
+    async function importData(input) {
+        const file = input.files[0];
+        if (!file) return;
+        
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        try {
+            const res = await fetch(`${API_BASE}/import`, {
+                method: 'POST',
+                body: formData
+            });
+            const result = await res.json();
+            if (result.code === 0) {
+                showToast(result.message, 'success');
+                loadData();
+            } else {
+                showToast(result.message || '导入失败', 'error');
+            }
+        } catch (error) {
+            showToast('导入失败', 'error');
+        }
+        
+        input.value = '';
+    }
+
+    // 显示导入规则
+    function showImportRules() {
+        showModal('导入说明', `
+            <div class="import-rules">
+                <h4>Excel文件格式要求：</h4>
+                <table class="rules-table">
+                    <thead>
+                        <tr><th>列名</th><th>说明</th><th>必填</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>手机号</td><td>手机号码</td><td>是</td></tr>
+                        <tr><td>接码URL</td><td>接收验证码的URL</td><td>是</td></tr>
+                        <tr><td>状态</td><td>填写"已使用"或"未使用"</td><td>否</td></tr>
+                    </tbody>
+                </table>
+                <p class="rules-note">提示：可先下载模板，按模板格式填写后导入。</p>
+                <div style="text-align: center; margin-top: 15px;">
+                    <a href="${API_BASE}/template" class="btn btn-primary" style="text-decoration: none;">下载导入模板</a>
+                </div>
+            </div>
+        `, () => closeModal());
+    }
+</script>
+{% endblock %}
+
