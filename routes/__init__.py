@@ -11,6 +11,7 @@ login_bp = Blueprint('login', __name__, url_prefix='/api')
 phone_bp = Blueprint('phones', __name__, url_prefix='/api/phones')
 node_bp = Blueprint('nodes', __name__, url_prefix='/api/nodes')
 browser_bp = Blueprint('browsers', __name__, url_prefix='/api')
+settings_bp = Blueprint('settings', __name__, url_prefix='/api/settings')
 
 # 导入路由
 from routes import page_routes
@@ -19,4 +20,5 @@ from routes import login_routes
 from routes import phone_routes
 from routes import node_routes
 from routes import browser_routes
+from routes import settings_routes
 

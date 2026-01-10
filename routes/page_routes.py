@@ -41,3 +41,8 @@ def browser_list_page():
     """浏览器窗口列表页面"""
     return render_template('browser_list.html', page_title='浏览器窗口列表', current_url='/browser-list')
 
+
+@page_bp.route('/settings')
+def settings_page():
+    """系统设置页面"""
+    return render_template('settings.html', page_title='系统设置', current_url='/settings')

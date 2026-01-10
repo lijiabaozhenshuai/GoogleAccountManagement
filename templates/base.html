@@ -19,7 +19,15 @@
             </div>
             <nav class="sidebar-nav">
                 {% for menu_item in menu_config %}
-                <div class="nav-group">
+                {% set is_active = namespace(value=false) %}
+                {% if menu_item.children %}
+                    {% for child in menu_item.children %}
+                        {% if current_url == child.url %}
+                            {% set is_active.value = true %}
+                        {% endif %}
+                    {% endfor %}
+                {% endif %}
+                <div class="nav-group {% if menu_item.children and not is_active.value %}collapsed{% endif %}">
                     {% if menu_item.children %}
                     <div class="nav-group-title">
                         <i data-lucide="{{ menu_item.icon }}"></i>

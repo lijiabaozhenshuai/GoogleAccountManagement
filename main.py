@@ -32,7 +32,7 @@ def inject_menu():
 
 
 # 注册蓝图
-from routes import page_bp, account_bp, login_bp, phone_bp, node_bp, browser_bp
+from routes import page_bp, account_bp, login_bp, phone_bp, node_bp, browser_bp, settings_bp
 
 app.register_blueprint(page_bp)
 app.register_blueprint(account_bp)
@@ -40,6 +40,7 @@ app.register_blueprint(login_bp)
 app.register_blueprint(phone_bp)
 app.register_blueprint(node_bp)
 app.register_blueprint(browser_bp)
+app.register_blueprint(settings_bp)
 
 
 if __name__ == '__main__':

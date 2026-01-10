@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="settings-container">
+    <!-- MySQL 配置 -->
+    <div class="settings-card">
+        <div class="settings-card-header">
+            <i data-lucide="database"></i>
+            <h2>MySQL 数据库配置</h2>
+        </div>
+        <div class="settings-card-body">
+            <form id="mysql-form" class="settings-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="mysql-host">数据库主机</label>
+                        <input type="text" id="mysql-host" name="host" placeholder="localhost" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="mysql-port">端口</label>
+                        <input type="number" id="mysql-port" name="port" placeholder="3306" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="mysql-user">用户名</label>
+                        <input type="text" id="mysql-user" name="user" placeholder="root" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="mysql-password">密码</label>
+                        <input type="password" id="mysql-password" name="password" placeholder="******" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="mysql-database">数据库名</label>
+                    <input type="text" id="mysql-database" name="database" placeholder="google_account" required>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="save"></i>
+                        保存MySQL配置
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Hubstudio 配置 -->
+    <div class="settings-card">
+        <div class="settings-card-header">
+            <i data-lucide="cloud"></i>
+            <h2>Hubstudio API 配置</h2>
+        </div>
+        <div class="settings-card-body">
+            <form id="hubstudio-form" class="settings-form">
+                <div class="form-group">
+                    <label for="hubstudio-url">API 基础地址</label>
+                    <input type="url" id="hubstudio-url" name="base_url" placeholder="http://localhost:6873" required>
+                </div>
+                <div class="form-group">
+                    <label for="hubstudio-appid">App ID</label>
+                    <input type="text" id="hubstudio-appid" name="app_id" placeholder="请输入App ID" required>
+                </div>
+                <div class="form-group">
+                    <label for="hubstudio-secret">App Secret</label>
+                    <textarea id="hubstudio-secret" name="app_secret" rows="4" placeholder="请输入App Secret" required></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="save"></i>
+                        保存Hubstudio配置
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 频道头像路径配置 -->
+    <div class="settings-card">
+        <div class="settings-card-header">
+            <i data-lucide="image"></i>
+            <h2>频道头像路径配置</h2>
+        </div>
+        <div class="settings-card-body">
+            <form id="channel-avatar-form" class="settings-form">
+                <div class="form-group">
+                    <label for="channel-avatar-path">头像文件夹路径</label>
+                    <input type="text" id="channel-avatar-path" name="path" placeholder="D:\avatars" required>
+                    <small class="form-hint">请输入存放频道头像的文件夹路径</small>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="save"></i>
+                        保存头像路径配置
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 重启提示 -->
+    <div class="alert alert-warning">
+        <i data-lucide="alert-triangle"></i>
+        <div>
+            <strong>注意：</strong>配置修改后需要重启应用才能生效
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // 加载配置
+    async function loadConfig() {
+        try {
+            const response = await fetch('/api/settings/get-config');
+            const result = await response.json();
+            
+            if (result.success) {
+                const config = result.data;
+                
+                // 填充MySQL配置
+                if (config.mysql) {
+                    document.getElementById('mysql-host').value = config.mysql.host || '';
+                    document.getElementById('mysql-port').value = config.mysql.port || 3306;
+                    document.getElementById('mysql-user').value = config.mysql.user || '';
+                    document.getElementById('mysql-password').value = config.mysql.password || '';
+                    document.getElementById('mysql-database').value = config.mysql.database || '';
+                }
+                
+                // 填充Hubstudio配置
+                if (config.hubstudio) {
+                    document.getElementById('hubstudio-url').value = config.hubstudio.base_url || '';
+                    document.getElementById('hubstudio-appid').value = config.hubstudio.app_id || '';
+                    document.getElementById('hubstudio-secret').value = config.hubstudio.app_secret || '';
+                }
+                
+                // 填充频道头像路径
+                if (config.channel_avatar_path !== undefined) {
+                    document.getElementById('channel-avatar-path').value = config.channel_avatar_path;
+                }
+            } else {
+                showToast('加载配置失败: ' + result.message, 'error');
+            }
+        } catch (error) {
+            showToast('加载配置失败: ' + error.message, 'error');
+        }
+    }
+
+    // 保存MySQL配置
+    document.getElementById('mysql-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const formData = new FormData(e.target);
+        const data = {
+            host: formData.get('host'),
+            port: parseInt(formData.get('port')),
+            user: formData.get('user'),
+            password: formData.get('password'),
+            database: formData.get('database')
+        };
+        
+        try {
+            const response = await fetch('/api/settings/update-config', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    type: 'mysql',
+                    data: data
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                showToast(result.message, 'success');
+            } else {
+                showToast('保存失败: ' + result.message, 'error');
+            }
+        } catch (error) {
+            showToast('保存失败: ' + error.message, 'error');
+        }
+    });
+
+    // 保存Hubstudio配置
+    document.getElementById('hubstudio-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const formData = new FormData(e.target);
+        const data = {
+            base_url: formData.get('base_url'),
+            app_id: formData.get('app_id'),
+            app_secret: formData.get('app_secret')
+        };
+        
+        try {
+            const response = await fetch('/api/settings/update-config', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    type: 'hubstudio',
+                    data: data
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                showToast(result.message, 'success');
+            } else {
+                showToast('保存失败: ' + result.message, 'error');
+            }
+        } catch (error) {
+            showToast('保存失败: ' + error.message, 'error');
+        }
+    });
+
+    // 保存频道头像路径配置
+    document.getElementById('channel-avatar-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const formData = new FormData(e.target);
+        const data = {
+            path: formData.get('path')
+        };
+        
+        try {
+            const response = await fetch('/api/settings/update-config', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    type: 'channel_avatar',
+                    data: data
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                showToast(result.message, 'success');
+            } else {
+                showToast('保存失败: ' + result.message, 'error');
+            }
+        } catch (error) {
+            showToast('保存失败: ' + error.message, 'error');
+        }
+    });
+
+    // 页面加载时加载配置
+    loadConfig();
+    
+    // 重新创建图标
+    lucide.createIcons();
+</script>
+{% endblock %}
+

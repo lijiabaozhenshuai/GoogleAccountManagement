@@ -32,6 +32,15 @@ MENU_CONFIG = [
             {"name": "浏览器窗口列表", "icon": "layout-grid", "url": "/browser-list", "order": 2},
         ]
     },
+    {
+        "name": "系统管理",
+        "icon": "settings",
+        "url": None,
+        "order": 3,
+        "children": [
+            {"name": "系统设置", "icon": "sliders", "url": "/settings", "order": 1},
+        ]
+    },
 ]
 
 # Hubstudio API 配置
@@ -69,4 +78,7 @@ CAPTCHA_CONFIG = {
     "api_key": "d9718240bbbf8709464fc7f74f6498bc",  # 请替换为您的2captcha API密钥
     "enabled": True,  # 是否启用验证码解决功能
 }
+
+# 频道头像路径配置
+CHANNEL_AVATAR_PATH = ""
 
