@@ -29,6 +29,7 @@ class Account(db.Model):
     account = db.Column(db.String(255), nullable=False, comment='账号')
     password = db.Column(db.String(255), nullable=False, comment='密码')
     backup_email = db.Column(db.String(255), nullable=True, comment='辅助邮箱')
+    phone_id = db.Column(db.Integer, db.ForeignKey('phones.id'), nullable=True, comment='绑定的手机号ID')
     status = db.Column(db.Boolean, default=False, comment='状态：是否使用')
     login_status = db.Column(db.String(50), default='not_logged', comment='登录状态')
     browser_env_id = db.Column(db.String(100), nullable=True, comment='浏览器环境ID')
@@ -37,6 +38,8 @@ class Account(db.Model):
     
     # 关联登录日志
     login_logs = db.relationship('LoginLog', backref='account_ref', lazy='dynamic')
+    # 关联手机号
+    phone = db.relationship('Phone', backref='bound_account', foreign_keys=[phone_id])
     
     def to_dict(self):
         return {
@@ -44,6 +47,8 @@ class Account(db.Model):
             'account': self.account,
             'password': self.password,
             'backup_email': self.backup_email or '',
+            'phone_id': self.phone_id,
+            'phone_number': self.phone.phone_number if self.phone else '',
             'status': self.status,
             'login_status': self.login_status or 'not_logged',
             'login_status_text': LOGIN_STATUS.get(self.login_status, '未知'),

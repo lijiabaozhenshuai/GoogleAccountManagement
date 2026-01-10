@@ -64,3 +64,9 @@ APP_CONFIG = {
     "PORT": 5000,
 }
 
+# 2Captcha API 配置（用于解决人机验证）
+CAPTCHA_CONFIG = {
+    "api_key": "d9718240bbbf8709464fc7f74f6498bc",  # 请替换为您的2captcha API密钥
+    "enabled": True,  # 是否启用验证码解决功能
+}
+

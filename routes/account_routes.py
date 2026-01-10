@@ -133,3 +133,23 @@ def download_accounts_template():
     return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                      as_attachment=True, download_name='账号导入模板.xlsx')
 
+
+@account_bp.route('/<int:id>/reset-login-status', methods=['POST'])
+def reset_login_status(id):
+    """重置账号登录状态"""
+    account = Account.query.get_or_404(id)
+    
+    # 重置登录状态为空
+    account.login_status = None
+    db.session.commit()
+    
+    return jsonify({'code': 0, 'message': '登录状态已重置', 'data': account.to_dict()})
+
+
+@account_bp.route('/batch-reset-login-status', methods=['POST'])
+def batch_reset_login_status():
+    """批量重置账号登录状态"""
+    ids = request.json.get('ids', [])
+    Account.query.filter(Account.id.in_(ids)).update({'login_status': None}, synchronize_session=False)
+    db.session.commit()
+    return jsonify({'code': 0, 'message': f'成功重置 {len(ids)} 个账号的登录状态'})

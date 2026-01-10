@@ -32,6 +32,10 @@
 <div class="batch-bar" id="batch-bar">
     <span class="selected-count">已选择 <span id="selected-count">0</span> 条</span>
     <div class="batch-actions">
+        <button class="btn btn-sm btn-warning" onclick="batchResetLoginStatus()" style="background-color: #f59e0b;">
+            <i data-lucide="refresh-cw"></i>
+            <span>重置登录状态</span>
+        </button>
         <button class="btn btn-sm btn-danger" onclick="batchDelete()">
             <i data-lucide="trash-2"></i>
             <span>批量删除</span>
@@ -50,6 +54,7 @@
                 <th>账号</th>
                 <th>密码</th>
                 <th>辅助邮箱</th>
+                <th>手机号</th>
                 <th>登录状态</th>
                 <th>环境ID</th>
                 <th>创建时间</th>
@@ -261,6 +266,7 @@
                 <td>${escapeHtml(item.account)}</td>
                 <td>${escapeHtml(item.password)}</td>
                 <td>${escapeHtml(item.backup_email)}</td>
+                <td>${item.phone_number ? escapeHtml(item.phone_number) : '-'}</td>
                 <td>
                     <span class="login-status-tag ${loginStatus}">
                         ${isLogging ? '<span class="logging-spinner"></span>' : ''}
@@ -274,6 +280,9 @@
                         <button class="action-btn login" onclick="autoLogin(${item.id})" title="自动登录" ${isLogging ? 'disabled' : ''}>
                             <i data-lucide="log-in"></i>
                         </button>
+                        ${isLogging ? `<button class="action-btn reset" onclick="resetLoginStatus(${item.id})" title="重置登录状态" style="color: #f59e0b;">
+                            <i data-lucide="refresh-cw"></i>
+                        </button>` : ''}
                         <button class="action-btn log" onclick="viewLogs(${item.id})" title="查看日志">
                             <i data-lucide="file-text"></i>
                         </button>
@@ -311,6 +320,26 @@
             }
         } catch (error) {
             showToast('操作失败', 'error');
+        }
+    }
+    
+    // 重置登录状态
+    async function resetLoginStatus(id) {
+        if (!confirm('确定要重置这个账号的登录状态吗？\n这将清除"登录中"状态，让您可以重新登录。')) return;
+        
+        try {
+            const res = await fetch(`${API_BASE}/${id}/reset-login-status`, {
+                method: 'POST'
+            });
+            const result = await res.json();
+            if (result.code === 0) {
+                showToast('登录状态已重置', 'success');
+                loadData();
+            } else {
+                showToast(result.message || '重置失败', 'error');
+            }
+        } catch (error) {
+            showToast('重置失败', 'error');
         }
     }
     
@@ -517,6 +546,35 @@
         }
     }
 
+    // 批量重置登录状态
+    async function batchResetLoginStatus() {
+        const ids = getSelectedIds();
+        if (ids.length === 0) {
+            showToast('请先选择要重置的账号', 'warning');
+            return;
+        }
+        
+        if (!confirm(`确定要重置选中的 ${ids.length} 个账号的登录状态吗？\n这将清除"登录中"状态。`)) return;
+        
+        try {
+            const res = await fetch(`${API_BASE}/batch-reset-login-status`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids })
+            });
+            const result = await res.json();
+            if (result.code === 0) {
+                showToast(result.message, 'success');
+                loadData();
+                clearSelection();
+            } else {
+                showToast(result.message || '操作失败', 'error');
+            }
+        } catch (error) {
+            showToast('操作失败', 'error');
+        }
+    }
+    
     // 批量删除
     async function batchDelete() {
         const ids = getSelectedIds();
