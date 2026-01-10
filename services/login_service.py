@@ -69,6 +69,11 @@ def detect_login_page_state(driver):
             print(f"[状态检测错误] 无法获取URL，浏览器可能已关闭: {str(e)}")
             raise Exception("浏览器连接失败")
         
+        # 优先检查是否是身份验证失败页面
+        if "signin/rejected" in current_url:
+            print(f"[状态检测] 检测到身份验证失败页面 (We couldn't verify it's you)")
+            return "need_security_verification"
+        
         # 优先通过 URL 判断（最可靠的方法）
         if "myaccount.google.com" in current_url:
             # 检查是否是修改密码页面
@@ -216,6 +221,15 @@ def detect_login_page_state(driver):
         
         # 如果 URL 判断不明确，再通过页面元素判断
         if "accounts.google.com" in current_url:
+            # 检查页面是否显示 "We couldn't verify it's you"
+            try:
+                couldnt_verify = driver.find_element(By.XPATH, "//h1[contains(text(), \"We couldn't verify\") or contains(text(), \"couldn't verify\")]")
+                if couldnt_verify and couldnt_verify.is_displayed():
+                    print(f"[状态检测] 检测到 'We couldn't verify it's you' 页面")
+                    return "need_security_verification"
+            except:
+                pass
+            
             # 检查是否是 "Verify it's you" 页面（两种类型）
             try:
                 verify_title = driver.find_element(By.XPATH, "//h1[contains(text(), \"Verify it's you\") or contains(text(), '验证您的身份')]")
@@ -1085,16 +1099,29 @@ def check_password_page_security_verification(driver):
     try:
         print(f"[登录] 跳转到修改密码页面检测安全验证...")
         driver.get("https://myaccount.google.com/signinoptions/password")
-        time.sleep(5)  # 等待页面加载，可能会重新要求登录验证
+        time.sleep(5)  # 等待页面加载，可能会重新要求登录验证或跳转到验证失败页面
+        
+        # 检查当前URL
+        current_url = driver.current_url
+        print(f"[登录] 当前 URL: {current_url}")
+        
+        # 检查是否跳转到 "We couldn't verify it's you" 页面
+        if "signin/rejected" in current_url:
+            print(f"[登录] ⚠️ 检测到跳转到身份验证失败页面 (signin/rejected)")
+            print(f"[登录] 这表示 Google 无法验证身份，需要使用之前登录过的设备或网络")
+            return "success_with_verification", "登录成功，但需要安全验证（无法验证身份）"
         
         # 检查是否跳转到登录页面（需要重新验证）
-        current_url = driver.current_url
         if "signin" in current_url and "myaccount" not in current_url:
-            print(f"[登录] 检测到跳转到登录验证页面，等待自动跳转回修改密码页面...")
+            print(f"[登录] 检测到跳转到登录验证页面，等待自动跳转...")
             time.sleep(10)  # 等待自动跳转
             current_url = driver.current_url
-        
-        print(f"[登录] 当前 URL: {current_url}")
+            print(f"[登录] 等待后的 URL: {current_url}")
+            
+            # 再次检查是否是 rejected 页面
+            if "signin/rejected" in current_url:
+                print(f"[登录] ⚠️ 跳转后仍是身份验证失败页面")
+                return "success_with_verification", "登录成功，但需要安全验证（无法验证身份）"
         
         # 重新检测状态
         verification_state = detect_login_page_state(driver)
