@@ -725,6 +725,39 @@ body {
     margin-bottom: 20px;
 }
 
+/* ==================== 搜索栏 ==================== */
+.search-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--content-bg);
+    padding: 16px 20px;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-color);
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    box-shadow: var(--shadow-sm);
+}
+
+.search-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.search-item .form-label {
+    margin-bottom: 0;
+    white-space: nowrap;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.search-item .form-input,
+.search-item .form-select-sm {
+    width: 160px;
+    padding: 6px 12px;
+}
+
 .batch-bar.show {
     display: flex;
 }

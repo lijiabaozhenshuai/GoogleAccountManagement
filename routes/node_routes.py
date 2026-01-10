@@ -12,15 +12,26 @@ from datetime import datetime
 
 @node_bp.route('', methods=['GET'])
 def get_nodes():
-    """获取节点列表（支持分页）"""
+    """获取节点列表（支持分页和筛选）"""
     page = request.args.get('page', 1, type=int)
     page_size = request.args.get('page_size', 20, type=int)
+    ip = request.args.get('ip', '')
+    status = request.args.get('status', '')
     
     # 限制每页最大数量
     page_size = min(page_size, 100)
     
+    # 构建查询
+    query = Node.query
+    
+    if ip:
+        query = query.filter(Node.ip.like(f'%{ip}%'))
+        
+    if status != '':
+        query = query.filter(Node.status == (status == 'true' or status == '1'))
+        
     # 分页查询
-    pagination = Node.query.order_by(Node.id.desc()).paginate(
+    pagination = query.order_by(Node.id.desc()).paginate(
         page=page, per_page=page_size, error_out=False
     )
     

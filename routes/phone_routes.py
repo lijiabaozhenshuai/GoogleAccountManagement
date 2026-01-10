@@ -12,15 +12,26 @@ from datetime import datetime
 
 @phone_bp.route('', methods=['GET'])
 def get_phones():
-    """获取手机号列表（支持分页）"""
+    """获取手机号列表（支持分页和筛选）"""
     page = request.args.get('page', 1, type=int)
     page_size = request.args.get('page_size', 20, type=int)
+    phone_number = request.args.get('phone_number', '')
+    status = request.args.get('status', '')
     
     # 限制每页最大数量
     page_size = min(page_size, 100)
     
+    # 构建查询
+    query = Phone.query
+    
+    if phone_number:
+        query = query.filter(Phone.phone_number.like(f'%{phone_number}%'))
+    
+    if status != '':
+        query = query.filter(Phone.status == (status == 'true' or status == '1'))
+        
     # 分页查询
-    pagination = Phone.query.order_by(Phone.id.desc()).paginate(
+    pagination = query.order_by(Phone.id.desc()).paginate(
         page=page, per_page=page_size, error_out=False
     )
     

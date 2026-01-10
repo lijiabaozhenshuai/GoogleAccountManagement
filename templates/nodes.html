@@ -1,6 +1,32 @@
 {% extends "base.html" %}
 
 {% block content %}
+<!-- 搜索栏 -->
+<div class="search-container">
+    <div class="search-item">
+        <label class="form-label">节点IP：</label>
+        <input type="text" id="search-ip" class="form-input" placeholder="输入IP搜索...">
+    </div>
+    <div class="search-item">
+        <label class="form-label">状态：</label>
+        <select id="filter-status" class="form-select-sm">
+            <option value="">全部</option>
+            <option value="true">已使用</option>
+            <option value="false">未使用</option>
+        </select>
+    </div>
+    <div class="search-actions">
+        <button class="btn btn-primary" onclick="search()">
+            <i data-lucide="search"></i>
+            <span>搜索</span>
+        </button>
+        <button class="btn btn-outline" onclick="resetSearch()">
+            <i data-lucide="refresh-cw"></i>
+            <span>重置</span>
+        </button>
+    </div>
+</div>
+
 <!-- 工具栏 -->
 <div class="toolbar">
     <div class="toolbar-left">
@@ -125,7 +151,13 @@
     // 加载数据
     async function loadData() {
         try {
-            const res = await fetch(`${API_BASE}?page=${currentPage}&page_size=${pageSize}`);
+            const ip = document.getElementById('search-ip').value;
+            const status = document.getElementById('filter-status').value;
+            let url = `${API_BASE}?page=${currentPage}&page_size=${pageSize}`;
+            if (ip) url += `&ip=${encodeURIComponent(ip)}`;
+            if (status !== '') url += `&status=${status}`;
+            
+            const res = await fetch(url);
             const data = await res.json();
             if (data.code === 0) {
                 totalCount = data.total;
@@ -137,6 +169,20 @@
         } catch (error) {
             showToast('加载数据失败', 'error');
         }
+    }
+
+    // 搜索
+    function search() {
+        currentPage = 1;
+        loadData();
+    }
+
+    // 重置搜索
+    function resetSearch() {
+        document.getElementById('search-ip').value = '';
+        document.getElementById('filter-status').value = '';
+        currentPage = 1;
+        loadData();
     }
     
     // 渲染分页
