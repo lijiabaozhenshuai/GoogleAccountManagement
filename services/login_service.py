@@ -73,6 +73,11 @@ def detect_login_page_state(driver):
         if "myaccount.google.com" in current_url:
             return "logged_in"
         
+        # 检查是否是选择账号页面
+        if "accountchooser" in current_url or "chooseaccount" in current_url:
+            print(f"[状态检测] 检测到选择账号页面")
+            return "choose_account"
+        
         # 检查是否是密码输入页面（通过 URL 判断）
         if "/signin/challenge/pwd" in current_url or "/challenge/pwd" in current_url:
             try:
@@ -82,6 +87,16 @@ def detect_login_page_state(driver):
                     return "need_password"
             except:
                 pass
+        
+        # 检查是否是恢复选项页面（添加手机号和邮箱）
+        if "recoveryoptions" in current_url:
+            print(f"[状态检测] 检测到恢复选项设置页面")
+            return "recovery_options"
+        
+        # 检查是否是设置住址页面
+        if "homeaddress" in current_url:
+            print(f"[状态检测] 检测到设置住址页面")
+            return "home_address"
         
         # 检查是否需要验证手机号
         if "challenge/iap" in current_url or "speedbump/idvreenable" in current_url or "challenge/dp" in current_url:
@@ -101,6 +116,16 @@ def detect_login_page_state(driver):
         # 检查是否是"Verify it's you"页面 - 需要直接点击Next按钮的
         if "confirmidentifier" in current_url or "signin/v2/challenge" in current_url or "challenge/selection" in current_url:
             print(f"[状态检测] URL包含Verify关键词，检查页面元素...")
+            
+            # 先检查是否是选择验证方式的页面（有 "Confirm your recovery email" 选项）
+            try:
+                recovery_email_option = driver.find_element(By.XPATH, "//div[contains(text(), 'Confirm your recovery email') or contains(text(), '确认您的恢复电子邮件')]")
+                if recovery_email_option and recovery_email_option.is_displayed():
+                    print(f"[状态检测] ✅ 检测到选择验证方式页面（需要点击recovery email）")
+                    return "verify_identity"
+            except:
+                pass
+            
             try:
                 # 检查是否有"Verify it's you"标题
                 verify_title = driver.find_element(By.XPATH, "//h1[contains(text(), \"Verify it's you\") or contains(text(), '验证您的身份')]")
@@ -126,8 +151,9 @@ def detect_login_page_state(driver):
                                 next_button_found = True
                                 print(f"[状态检测] 通过文本找到Next按钮")
                             except:
-                                print(f"[状态检测警告] 有Verify标题但未找到Next按钮")
-                                pass
+                                print(f"[状态检测警告] 有Verify标题但未找到Next按钮，可能是选择页面")
+                                # 如果有标题但没有Next按钮，可能是选择验证方式的页面
+                                return "verify_identity"
                     
                     if next_button_found:
                         print(f"[状态检测] ✅ 确认为需要点击Next的 'Verify it's you' 页面")
@@ -144,6 +170,10 @@ def detect_login_page_state(driver):
                         return "verify_click_next"
                 except:
                     print(f"[状态检测] 也未找到Next按钮")
+                    # 如果URL是selection且没有Next按钮，很可能是选择验证方式页面
+                    if "selection" in current_url:
+                        print(f"[状态检测] URL包含selection，判断为选择验证方式页面")
+                        return "verify_identity"
                     pass
         
         # 检查账号被禁用
@@ -320,34 +350,61 @@ def handle_verify_identity_page(driver, backup_email):
             recovery_email_option = None
             
             try:
-                # 方式1: 通过文本内容查找
-                recovery_email_option = driver.find_element(By.XPATH, 
-                    "//div[contains(text(), 'Confirm your recovery email') or contains(text(), '确认您的恢复电子邮件地址')]")
+                # 方式1: 通过文本内容查找（区分大小写和不区分）
+                recovery_email_option = WebDriverWait(driver, 5).until(
+                    EC.element_to_be_clickable((By.XPATH, "//div[contains(text(), 'Confirm your recovery email')]"))
+                )
+                print(f"[验证身份] 方式1找到选项")
             except:
                 try:
-                    # 方式2: 通过图标和文本组合查找
+                    # 方式2: 不区分大小写
                     recovery_email_option = driver.find_element(By.XPATH,
-                        "//div[contains(@class, 'JDAKTe') and .//div[contains(text(), 'recovery email')]]")
+                        "//div[contains(translate(text(), 'CONFIRM', 'confirm'), 'confirm') and contains(translate(text(), 'RECOVERY', 'recovery'), 'recovery') and contains(translate(text(), 'EMAIL', 'email'), 'email')]")
+                    print(f"[验证身份] 方式2找到选项")
                 except:
-                    # 方式3: 查找包含 recovery 的任何选项
-                    recovery_email_option = driver.find_element(By.XPATH,
-                        "//*[contains(text(), 'recovery') and contains(text(), 'email')]")
+                    try:
+                        # 方式3: 查找包含 recovery email 的任何可见元素
+                        elements = driver.find_elements(By.XPATH, "//*[contains(text(), 'recovery') and contains(text(), 'email')]")
+                        for elem in elements:
+                            if elem.is_displayed() and 'Confirm' in elem.text:
+                                recovery_email_option = elem
+                                print(f"[验证身份] 方式3找到选项")
+                                break
+                    except:
+                        pass
             
             if recovery_email_option:
                 print(f"[验证身份] 找到 'Confirm your recovery email' 选项，准备点击...")
+                print(f"[验证身份] 选项文本: {recovery_email_option.text}")
                 # 滚动到元素可见
-                driver.execute_script("arguments[0].scrollIntoView(true);", recovery_email_option)
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", recovery_email_option)
                 time.sleep(1)
-                # 点击选项
-                recovery_email_option.click()
-                print(f"[验证身份] 已点击 'Confirm your recovery email'")
+                
+                # 尝试多种点击方式
+                try:
+                    recovery_email_option.click()
+                    print(f"[验证身份] 已点击（普通点击）")
+                except:
+                    try:
+                        driver.execute_script("arguments[0].click();", recovery_email_option)
+                        print(f"[验证身份] 已点击（JS点击）")
+                    except Exception as click_err:
+                        print(f"[验证身份错误] 点击失败: {str(click_err)}")
+                        return "click_failed"
+                
                 time.sleep(3)
             else:
                 print(f"[验证身份错误] 未找到 'Confirm your recovery email' 选项")
+                # 打印页面所有可见文本帮助调试
+                try:
+                    page_text = driver.find_element(By.TAG_NAME, 'body').text
+                    print(f"[验证身份调试] 页面内容: {page_text[:500]}")
+                except:
+                    pass
                 return "option_not_found"
                 
         except Exception as e:
-            error_msg = f"点击 'Confirm your recovery email' 失败: {str(e)}"
+            error_msg = f"查找或点击 'Confirm your recovery email' 失败: {str(e)}"
             print(f"[验证身份错误] {error_msg}")
             import traceback
             traceback.print_exc()
@@ -355,21 +412,94 @@ def handle_verify_identity_page(driver, backup_email):
         
         # 输入辅助邮箱
         try:
-            print(f"[验证身份] 等待邮箱输入框...")
-            email_input = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.XPATH, "//input[@type='email']"))
-            )
-            email_input.clear()
-            email_input.send_keys(backup_email)
-            print(f"[验证身份] 已输入辅助邮箱: {backup_email}")
+            print(f"[验证身份] 等待邮箱输入框可交互...")
+            
+            # 先尝试通过ID查找（最精确）
+            email_input = None
+            try:
+                email_input = WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.ID, "knowledge-preregistered-email-response"))
+                )
+                print(f"[验证身份] 通过ID找到邮箱输入框")
+            except:
+                # 如果ID找不到，尝试通过name属性
+                try:
+                    email_input = WebDriverWait(driver, 5).until(
+                        EC.presence_of_element_located((By.NAME, "knowledgePreregisteredEmailResponse"))
+                    )
+                    print(f"[验证身份] 通过name找到邮箱输入框")
+                except:
+                    # 最后尝试通过type=email
+                    email_input = WebDriverWait(driver, 5).until(
+                        EC.presence_of_element_located((By.XPATH, "//input[@type='email']"))
+                    )
+                    print(f"[验证身份] 通过type找到邮箱输入框")
+            
+            if not email_input:
+                print(f"[验证身份错误] 未找到邮箱输入框")
+                return "input_not_found"
+            
+            # 滚动到元素位置
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", email_input)
+            time.sleep(1)
+            
+            # 等待元素真正可交互（最多等待10秒）
+            try:
+                WebDriverWait(driver, 10).until(
+                    EC.element_to_be_clickable(email_input)
+                )
+                print(f"[验证身份] 邮箱输入框已可交互")
+            except:
+                print(f"[验证身份警告] 输入框等待超时，尝试直接操作")
+            
+            # 尝试点击激活输入框
+            try:
+                email_input.click()
+                time.sleep(0.5)
+                print(f"[验证身份] 已点击激活输入框")
+            except Exception as click_err:
+                print(f"[验证身份警告] 点击输入框失败: {str(click_err)}")
+            
+            # 清空并输入
+            try:
+                email_input.clear()
+                email_input.send_keys(backup_email)
+                print(f"[验证身份] 已输入辅助邮箱（普通方式）: {backup_email}")
+            except Exception as input_error:
+                # 如果常规方式失败，使用JavaScript直接设置值
+                print(f"[验证身份] 常规输入失败，尝试使用JS输入: {str(input_error)}")
+                try:
+                    driver.execute_script(f"arguments[0].value = '{backup_email}';", email_input)
+                    # 触发input事件以确保页面识别到输入
+                    driver.execute_script("arguments[0].dispatchEvent(new Event('input', { bubbles: true }));", email_input)
+                    driver.execute_script("arguments[0].dispatchEvent(new Event('change', { bubbles: true }));", email_input)
+                    print(f"[验证身份] 已使用JS输入辅助邮箱: {backup_email}")
+                except Exception as js_error:
+                    print(f"[验证身份错误] JS输入也失败: {str(js_error)}")
+                    return "input_failed"
             
             # 点击下一步
             print(f"[验证身份] 查找下一步按钮...")
-            next_button = WebDriverWait(driver, 10).until(
-                EC.element_to_be_clickable((By.XPATH, "//button[@type='button']//span[contains(text(), 'Next') or contains(text(), '下一步')]"))
-            )
-            next_button.click()
-            print(f"[验证身份] 已点击下一步")
+            time.sleep(1)  # 等待输入生效
+            
+            try:
+                next_button = WebDriverWait(driver, 10).until(
+                    EC.element_to_be_clickable((By.XPATH, "//button[@type='button']//span[contains(text(), 'Next') or contains(text(), '下一步')]"))
+                )
+                # 滚动到按钮位置
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", next_button)
+                time.sleep(0.5)
+                next_button.click()
+                print(f"[验证身份] 已点击下一步")
+            except:
+                # 如果找不到，尝试其他方式
+                try:
+                    next_button = driver.find_element(By.XPATH, "//button[@jsname='LgbsSe']")
+                    driver.execute_script("arguments[0].click();", next_button)
+                    print(f"[验证身份] 已点击下一步（JS方式）")
+                except Exception as btn_err:
+                    print(f"[验证身份错误] 未找到下一步按钮: {str(btn_err)}")
+                    return "next_button_not_found"
             
             # 等待页面跳转
             time.sleep(5)
@@ -730,18 +860,404 @@ def handle_captcha_page(driver):
         return "error"
 
 
-def get_available_phone():
-    """获取一个可用的手机号（未使用且未过期）"""
+def handle_recovery_options_page(driver, account_id):
+    """处理恢复选项页面（添加手机号）
+    
+    Args:
+        driver: Selenium WebDriver
+        account_id: 账号ID
+    
+    Returns:
+        str: 处理结果 "success"/"no_phone"/"failed"
+    """
     try:
+        print(f"[恢复选项] 开始处理恢复选项页面...")
+        
+        # 1. 获取可用手机号（优先使用已绑定的）
+        phone = get_available_phone(account_id)
+        if not phone:
+            print(f"[恢复选项错误] 没有可用的手机号")
+            return "no_phone"
+        
+        # 等待页面加载
+        time.sleep(2)
+        
+        # 2. 输入手机号
+        try:
+            print(f"[恢复选项] 查找手机号输入框...")
+            # 多种方式查找输入框
+            phone_input = None
+            try:
+                # 方式1: 通过placeholder
+                phone_input = WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.XPATH, "//input[@placeholder='Enter phone' or contains(@aria-label, 'phone')]"))
+                )
+                print(f"[恢复选项] 通过placeholder找到输入框")
+            except:
+                try:
+                    # 方式2: 通过type=tel
+                    phone_input = driver.find_element(By.XPATH, "//input[@type='tel']")
+                    print(f"[恢复选项] 通过type=tel找到输入框")
+                except:
+                    # 方式3: 查找所有input，找最可能是手机号的
+                    inputs = driver.find_elements(By.TAG_NAME, "input")
+                    for inp in inputs:
+                        if inp.is_displayed() and not inp.get_attribute('value'):
+                            phone_input = inp
+                            print(f"[恢复选项] 通过遍历找到输入框")
+                            break
+            
+            if not phone_input:
+                print(f"[恢复选项错误] 未找到手机号输入框")
+                return "phone_input_not_found"
+            
+            # 滚动到输入框
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", phone_input)
+            time.sleep(1)
+            
+            # 输入手机号（带+号）
+            full_phone = f"+{phone.phone_number}"
+            print(f"[恢复选项] 输入手机号: {full_phone}")
+            
+            try:
+                # 点击激活
+                phone_input.click()
+                time.sleep(0.5)
+                # 输入
+                phone_input.clear()
+                phone_input.send_keys(full_phone)
+                print(f"[恢复选项] 已输入手机号（普通方式）")
+            except:
+                # 使用JS方式
+                driver.execute_script(f"arguments[0].value = '{full_phone}';", phone_input)
+                driver.execute_script("arguments[0].dispatchEvent(new Event('input', { bubbles: true }));", phone_input)
+                print(f"[恢复选项] 已输入手机号（JS方式）")
+            
+            time.sleep(2)
+            
+        except Exception as e:
+            error_msg = f"输入手机号失败: {str(e)}"
+            print(f"[恢复选项错误] {error_msg}")
+            import traceback
+            traceback.print_exc()
+            return "input_phone_failed"
+        
+        # 3. 点击Save按钮
+        try:
+            print(f"[恢复选项] 查找Save按钮...")
+            save_button = None
+            
+            try:
+                # 方式1: 通过文本
+                save_button = WebDriverWait(driver, 10).until(
+                    EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Save') or contains(text(), '保存')]"))
+                )
+                print(f"[恢复选项] 通过文本找到Save按钮")
+            except:
+                # 方式2: 查找所有button，找包含save的
+                buttons = driver.find_elements(By.TAG_NAME, "button")
+                for btn in buttons:
+                    if btn.is_displayed() and ('save' in btn.text.lower() or '保存' in btn.text):
+                        save_button = btn
+                        print(f"[恢复选项] 通过遍历找到Save按钮")
+                        break
+            
+            if save_button:
+                # 滚动到按钮
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", save_button)
+                time.sleep(1)
+                
+                # 点击
+                try:
+                    save_button.click()
+                    print(f"[恢复选项] 已点击Save按钮")
+                except:
+                    driver.execute_script("arguments[0].click();", save_button)
+                    print(f"[恢复选项] 已点击Save按钮（JS方式）")
+                
+                # 等待页面跳转
+                time.sleep(5)
+                
+                # 检查结果
+                current_url = driver.current_url
+                print(f"[恢复选项] 保存后 URL: {current_url}")
+                
+                if "myaccount.google.com" in current_url:
+                    print(f"[恢复选项] ✅ 保存成功，已登录")
+                    
+                    # 更新数据库
+                    try:
+                        # 标记手机号为已使用
+                        if not phone.status:
+                            phone.status = True
+                            print(f"[恢复选项] 标记手机号为已使用")
+                        
+                        # 绑定手机号到账号
+                        account = Account.query.get(account_id)
+                        if account and account.phone_id != phone.id:
+                            account.phone_id = phone.id
+                            print(f"[恢复选项] 已绑定手机号到账号")
+                        
+                        db.session.commit()
+                    except Exception as e:
+                        print(f"[恢复选项警告] 更新数据库失败: {str(e)}")
+                    
+                    return "success"
+                else:
+                    print(f"[恢复选项] 保存完成，继续后续流程")
+                    
+                    # 更新数据库
+                    try:
+                        # 标记手机号为已使用
+                        if not phone.status:
+                            phone.status = True
+                            print(f"[恢复选项] 标记手机号为已使用")
+                        
+                        # 绑定手机号到账号
+                        account = Account.query.get(account_id)
+                        if account and account.phone_id != phone.id:
+                            account.phone_id = phone.id
+                            print(f"[恢复选项] 已绑定手机号到账号")
+                        
+                        db.session.commit()
+                    except Exception as e:
+                        print(f"[恢复选项警告] 更新数据库失败: {str(e)}")
+                    
+                    return "continue"
+            else:
+                print(f"[恢复选项错误] 未找到Save按钮")
+                return "save_button_not_found"
+                
+        except Exception as e:
+            error_msg = f"点击Save按钮失败: {str(e)}"
+            print(f"[恢复选项错误] {error_msg}")
+            import traceback
+            traceback.print_exc()
+            return "click_save_failed"
+            
+    except Exception as e:
+        error_msg = f"处理恢复选项页面失败: {str(e)}"
+        print(f"[恢复选项错误] {error_msg}")
+        import traceback
+        traceback.print_exc()
+        return "error"
+
+
+def handle_choose_account_page(driver, account_email):
+    """处理选择账号页面 - 点击对应的账号
+    
+    Args:
+        driver: Selenium WebDriver
+        account_email: 要选择的账号邮箱
+    
+    Returns:
+        str: 处理结果 "success"/"continue"/"failed"
+    """
+    try:
+        print(f"[选择账号] 开始处理选择账号页面...")
+        print(f"[选择账号] 要选择的账号: {account_email}")
+        
+        # 等待页面加载
+        time.sleep(2)
+        
+        # 查找并点击对应的账号
+        try:
+            print(f"[选择账号] 查找账号元素...")
+            account_element = None
+            
+            try:
+                # 方式1: 通过包含邮箱文本的元素查找
+                account_element = WebDriverWait(driver, 10).until(
+                    EC.element_to_be_clickable((By.XPATH, f"//*[contains(text(), '{account_email}')]"))
+                )
+                print(f"[选择账号] 通过邮箱文本找到账号元素")
+            except:
+                try:
+                    # 方式2: 查找所有可能的账号div
+                    elements = driver.find_elements(By.XPATH, "//div[@data-email or contains(@class, 'account')]")
+                    for elem in elements:
+                        if account_email.lower() in elem.text.lower():
+                            account_element = elem
+                            print(f"[选择账号] 通过遍历找到账号元素")
+                            break
+                except:
+                    pass
+            
+            if account_element:
+                # 滚动到元素
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", account_element)
+                time.sleep(1)
+                
+                # 点击
+                try:
+                    account_element.click()
+                    print(f"[选择账号] 已点击账号")
+                except:
+                    driver.execute_script("arguments[0].click();", account_element)
+                    print(f"[选择账号] 已点击账号（JS方式）")
+                
+                # 等待页面跳转
+                time.sleep(5)
+                
+                # 检查结果
+                current_url = driver.current_url
+                print(f"[选择账号] 点击后 URL: {current_url}")
+                
+                if "myaccount.google.com" in current_url:
+                    print(f"[选择账号] ✅ 选择成功，已登录")
+                    return "success"
+                else:
+                    print(f"[选择账号] 选择完成，继续后续流程")
+                    return "continue"
+            else:
+                print(f"[选择账号错误] 未找到对应的账号: {account_email}")
+                # 如果找不到账号，可能需要点击"Use another account"
+                try:
+                    use_another = driver.find_element(By.XPATH, "//div[contains(text(), 'Use another account') or contains(text(), '使用其他账号')]")
+                    if use_another:
+                        print(f"[选择账号] 找不到对应账号，点击'Use another account'")
+                        use_another.click()
+                        time.sleep(3)
+                        return "continue"
+                except:
+                    pass
+                return "account_not_found"
+                
+        except Exception as e:
+            error_msg = f"查找或点击账号失败: {str(e)}"
+            print(f"[选择账号错误] {error_msg}")
+            import traceback
+            traceback.print_exc()
+            return "click_failed"
+            
+    except Exception as e:
+        error_msg = f"处理选择账号页面失败: {str(e)}"
+        print(f"[选择账号错误] {error_msg}")
+        import traceback
+        traceback.print_exc()
+        return "error"
+
+
+def handle_home_address_page(driver):
+    """处理设置住址页面 - 点击Skip跳过
+    
+    Args:
+        driver: Selenium WebDriver
+    
+    Returns:
+        str: 处理结果 "success"/"continue"/"failed"
+    """
+    try:
+        print(f"[住址设置] 开始处理设置住址页面...")
+        
+        # 等待页面加载
+        time.sleep(2)
+        
+        # 查找并点击Skip按钮
+        try:
+            print(f"[住址设置] 查找Skip按钮...")
+            skip_button = None
+            
+            try:
+                # 方式1: 通过文本查找
+                skip_button = WebDriverWait(driver, 10).until(
+                    EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Skip') or contains(text(), '跳过')]"))
+                )
+                print(f"[住址设置] 通过文本找到Skip按钮")
+            except:
+                try:
+                    # 方式2: 查找所有button，找包含skip的
+                    buttons = driver.find_elements(By.TAG_NAME, "button")
+                    for btn in buttons:
+                        if btn.is_displayed() and ('skip' in btn.text.lower() or '跳过' in btn.text):
+                            skip_button = btn
+                            print(f"[住址设置] 通过遍历找到Skip按钮")
+                            break
+                except:
+                    pass
+            
+            if skip_button:
+                # 滚动到按钮
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", skip_button)
+                time.sleep(1)
+                
+                # 点击
+                try:
+                    skip_button.click()
+                    print(f"[住址设置] 已点击Skip按钮")
+                except:
+                    driver.execute_script("arguments[0].click();", skip_button)
+                    print(f"[住址设置] 已点击Skip按钮（JS方式）")
+                
+                # 等待页面跳转
+                time.sleep(5)
+                
+                # 检查结果
+                current_url = driver.current_url
+                print(f"[住址设置] 跳过后 URL: {current_url}")
+                
+                if "myaccount.google.com" in current_url:
+                    print(f"[住址设置] ✅ 跳过成功，已登录")
+                    return "success"
+                else:
+                    print(f"[住址设置] 跳过完成，继续后续流程")
+                    return "continue"
+            else:
+                print(f"[住址设置错误] 未找到Skip按钮")
+                return "skip_button_not_found"
+                
+        except Exception as e:
+            error_msg = f"查找或点击Skip按钮失败: {str(e)}"
+            print(f"[住址设置错误] {error_msg}")
+            import traceback
+            traceback.print_exc()
+            return "click_failed"
+            
+    except Exception as e:
+        error_msg = f"处理设置住址页面失败: {str(e)}"
+        print(f"[住址设置错误] {error_msg}")
+        import traceback
+        traceback.print_exc()
+        return "error"
+
+
+def get_available_phone(account_id=None):
+    """获取一个可用的手机号（优先使用已绑定的，否则获取新的）
+    
+    Args:
+        account_id: 账号ID，如果提供则优先使用该账号已绑定的手机号
+    
+    Returns:
+        Phone: 手机号对象，失败返回 None
+    """
+    try:
+        # 如果提供了账号ID，优先检查是否已绑定手机号
+        if account_id:
+            account = Account.query.get(account_id)
+            if account and account.phone_id:
+                bound_phone = Phone.query.get(account.phone_id)
+                if bound_phone:
+                    print(f"[手机号] 使用账号已绑定的手机号: {bound_phone.phone_number}")
+                    # 检查手机号是否过期
+                    now = datetime.now()
+                    if bound_phone.expire_time and bound_phone.expire_time < now:
+                        print(f"[手机号警告] 绑定的手机号已过期，将获取新的")
+                    else:
+                        # 如果有接码URL，优先使用绑定的
+                        if bound_phone.sms_url:
+                            return bound_phone
+                        else:
+                            print(f"[手机号警告] 绑定的手机号没有配置接码URL，将获取新的")
+        
+        # 如果没有绑定或绑定的不可用，查找新的可用手机号
         now = datetime.now()
-        # 查找未使用且未过期的手机号
         phone = Phone.query.filter(
             Phone.status == False,
             db.or_(Phone.expire_time == None, Phone.expire_time > now)
         ).first()
         
         if phone:
-            print(f"[手机号] 找到可用手机号: {phone.phone_number}")
+            print(f"[手机号] 找到新的可用手机号: {phone.phone_number}")
             return phone
         else:
             print(f"[手机号错误] 没有可用的手机号")
@@ -820,8 +1336,8 @@ def handle_phone_verification(driver, account_id):
     try:
         print(f"[手机验证] 开始处理手机号验证...")
         
-        # 1. 获取可用手机号
-        phone = get_available_phone()
+        # 1. 获取可用手机号（优先使用已绑定的）
+        phone = get_available_phone(account_id)
         if not phone:
             print(f"[手机验证错误] 没有可用的手机号")
             return "no_phone"
@@ -907,15 +1423,17 @@ def handle_phone_verification(driver, account_id):
                 # 6. 更新数据库
                 try:
                     # 标记手机号为已使用
-                    phone.status = True
-                    db.session.commit()
+                    if not phone.status:
+                        phone.status = True
+                        print(f"[手机验证] 标记手机号为已使用")
                     
-                    # 绑定手机号到账号
+                    # 绑定手机号到账号（如果还未绑定）
                     account = Account.query.get(account_id)
-                    if account:
+                    if account and account.phone_id != phone.id:
                         account.phone_id = phone.id
-                        db.session.commit()
                         print(f"[手机验证] 已绑定手机号到账号")
+                    
+                    db.session.commit()
                     
                 except Exception as e:
                     print(f"[手机验证警告] 更新数据库失败: {str(e)}")
@@ -935,10 +1453,17 @@ def handle_phone_verification(driver, account_id):
                 
                 # 更新数据库
                 try:
-                    phone.status = True
+                    # 标记手机号为已使用
+                    if not phone.status:
+                        phone.status = True
+                        print(f"[手机验证] 标记手机号为已使用")
+                    
+                    # 绑定手机号到账号（如果还未绑定）
                     account = Account.query.get(account_id)
-                    if account:
+                    if account and account.phone_id != phone.id:
                         account.phone_id = phone.id
+                        print(f"[手机验证] 已绑定手机号到账号")
+                    
                     db.session.commit()
                 except Exception as e:
                     print(f"[手机验证警告] 更新数据库失败: {str(e)}")
@@ -1035,13 +1560,41 @@ def perform_login(driver, account, password, account_id=None, backup_email=None)
     max_total_time = 600  # 最大总时间10分钟，超过则认为登录失败
     
     try:
+        # 等待浏览器完全启动
+        print(f"[登录] 等待浏览器完全启动...")
+        time.sleep(2)
+        
         # 导航到Google账号页面
         print(f"[登录] 正在访问 Google 账号页面...")
         try:
+            current_url_before = driver.current_url
+            print(f"[登录] 导航前URL: {current_url_before}")
+            
             driver.get('https://accounts.google.com/')
-            time.sleep(3)
+            print(f"[登录] 已发送导航请求，等待页面加载...")
+            
+            # 等待页面加载
+            time.sleep(5)
+            
+            current_url_after = driver.current_url
+            print(f"[登录] 导航后URL: {current_url_after}")
+            
+            # 如果仍然是空白页，可能是代理或网络问题
+            if current_url_after == "about:blank" or current_url_after == "data:,":
+                print(f"[登录警告] 页面仍然是空白，可能是网络或代理问题")
+                print(f"[登录] 再次尝试导航...")
+                driver.get('https://accounts.google.com/')
+                time.sleep(5)
+                current_url_retry = driver.current_url
+                print(f"[登录] 重试后URL: {current_url_retry}")
+                
+                if current_url_retry == "about:blank" or current_url_retry == "data:,":
+                    return "failed", "无法访问Google登录页面，请检查网络连接和代理设置"
+            
         except Exception as e:
             print(f"[登录错误] 访问页面失败，浏览器可能已关闭: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return "failed", "浏览器连接失败，可能已被关闭"
         
         # 循环处理登录流程（最多8次状态转换，增加重试机会）
@@ -1069,6 +1622,26 @@ def perform_login(driver, account, password, account_id=None, backup_email=None)
             
             if current_state == "logged_in":
                 return "success", "已登录状态"
+            
+            elif current_state == "choose_account":
+                # 处理选择账号页面
+                print(f"[登录] 开始处理选择账号页面...")
+                status = handle_choose_account_page(driver, account)
+                
+                if status == "success":
+                    return "success", "选择账号成功，已登录"
+                elif status == "continue":
+                    # 继续下一轮检测
+                    print(f"[登录] 选择账号完成，继续检测后续状态...")
+                    time.sleep(2)
+                    continue
+                elif status == "account_not_found":
+                    # 如果找不到账号，继续流程（可能会到输入邮箱页面）
+                    print(f"[登录] 未找到对应账号，继续正常登录流程...")
+                    time.sleep(2)
+                    continue
+                else:
+                    return "failed", f"选择账号失败: {status}"
             
             elif current_state == "need_email":
                 # 处理邮箱输入页面
@@ -1224,6 +1797,38 @@ def perform_login(driver, account, password, account_id=None, backup_email=None)
                 else:
                     return "failed", f"人机验证处理失败: {status}"
             
+            elif current_state == "recovery_options":
+                # 处理恢复选项页面（添加手机号）
+                print(f"[登录] 开始处理恢复选项页面...")
+                status = handle_recovery_options_page(driver, account_id)
+                
+                if status == "success":
+                    return "success", "恢复选项设置成功，已登录"
+                elif status == "continue":
+                    # 继续下一轮检测
+                    print(f"[登录] 恢复选项设置完成，继续检测后续状态...")
+                    time.sleep(2)
+                    continue
+                elif status == "no_phone":
+                    return "failed", "需要设置恢复手机号，但没有可用的手机号"
+                else:
+                    return "failed", f"恢复选项设置失败: {status}"
+            
+            elif current_state == "home_address":
+                # 处理设置住址页面
+                print(f"[登录] 开始处理设置住址页面...")
+                status = handle_home_address_page(driver)
+                
+                if status == "success":
+                    return "success", "设置住址跳过成功，已登录"
+                elif status == "continue":
+                    # 继续下一轮检测
+                    print(f"[登录] 设置住址跳过完成，继续检测后续状态...")
+                    time.sleep(2)
+                    continue
+                else:
+                    return "failed", f"设置住址页面处理失败: {status}"
+            
             elif current_state == "need_phone":
                 # 处理手机号验证
                 print(f"[登录] 开始处理手机号验证...")
@@ -1329,8 +1934,20 @@ def auto_login_task(app, account_id):
                 print(f"[自动登录错误] {error_msg}")
                 return
             
-            print(f"[自动登录] 浏览器已打开，开始登录")
+            print(f"[自动登录] 浏览器已打开，检查浏览器状态...")
             add_login_log(account_id, browser_env.container_code, 'auto_login', 'info', '浏览器已打开，开始登录')
+            
+            # 检查浏览器是否真的准备好了
+            try:
+                initial_url = driver.current_url
+                print(f"[自动登录] 浏览器初始URL: {initial_url}")
+            except Exception as e:
+                error_msg = f'无法获取浏览器URL，浏览器可能未正常启动: {str(e)}'
+                print(f"[自动登录错误] {error_msg}")
+                account.login_status = 'failed'
+                db.session.commit()
+                add_login_log(account_id, browser_env.container_code, 'auto_login', 'failed', error_msg)
+                return
             
             # 执行登录（传递账号ID和辅助邮箱）
             status, message = perform_login(driver, account.account, account.password, account_id=account_id, backup_email=account.backup_email)
