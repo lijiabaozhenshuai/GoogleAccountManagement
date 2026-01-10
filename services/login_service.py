@@ -71,7 +71,35 @@ def detect_login_page_state(driver):
         
         # 优先通过 URL 判断（最可靠的方法）
         if "myaccount.google.com" in current_url:
-            return "logged_in"
+            # 检查是否是修改密码页面
+            if "signinoptions/password" in current_url:
+                print(f"[状态检测] 检测到修改密码页面，检查是否需要安全验证...")
+                # 检查是否有安全验证要求
+                try:
+                    # 查找是否有安全验证相关的文本
+                    body_text = driver.find_element(By.TAG_NAME, 'body').text.lower()
+                    if any(keyword in body_text for keyword in ['verify', 'security', 'original device', '原设备', '安全验证', '验证身份']):
+                        # 但如果页面有"New password"和"Confirm new password"输入框，说明是正常的修改密码页面
+                        try:
+                            new_pwd = driver.find_element(By.XPATH, "//input[contains(@placeholder, 'New password') or contains(@aria-label, 'New password')]")
+                            confirm_pwd = driver.find_element(By.XPATH, "//input[contains(@placeholder, 'Confirm') or contains(@aria-label, 'Confirm')]")
+                            if new_pwd and confirm_pwd:
+                                print(f"[状态检测] 检测到正常的修改密码页面（有新密码输入框）")
+                                return "logged_in"
+                        except:
+                            # 如果找不到新密码输入框，可能是需要安全验证
+                            print(f"[状态检测] 检测到需要安全验证的修改密码页面")
+                            return "need_security_verification"
+                    else:
+                        # 没有安全验证关键词，正常的修改密码页面
+                        print(f"[状态检测] 正常的修改密码页面，登录成功")
+                        return "logged_in"
+                except Exception as e:
+                    print(f"[状态检测] 检查安全验证失败: {str(e)}，默认为登录成功")
+                    return "logged_in"
+            else:
+                # 其他myaccount页面，直接认为登录成功
+                return "logged_in"
         
         # 检查是否是选择账号页面
         if "accountchooser" in current_url or "chooseaccount" in current_url:
@@ -1043,6 +1071,46 @@ def handle_recovery_options_page(driver, account_id):
         return "error"
 
 
+def check_password_page_security_verification(driver):
+    """检查修改密码页面是否需要安全验证
+    
+    Args:
+        driver: Selenium WebDriver
+    
+    Returns:
+        tuple: (status, message)
+            - ("success", message): 无需安全验证
+            - ("success_with_verification", message): 需要安全验证
+    """
+    try:
+        print(f"[登录] 跳转到修改密码页面检测安全验证...")
+        driver.get("https://myaccount.google.com/signinoptions/password")
+        time.sleep(5)  # 等待页面加载，可能会重新要求登录验证
+        
+        # 检查是否跳转到登录页面（需要重新验证）
+        current_url = driver.current_url
+        if "signin" in current_url and "myaccount" not in current_url:
+            print(f"[登录] 检测到跳转到登录验证页面，等待自动跳转回修改密码页面...")
+            time.sleep(10)  # 等待自动跳转
+            current_url = driver.current_url
+        
+        print(f"[登录] 当前 URL: {current_url}")
+        
+        # 重新检测状态
+        verification_state = detect_login_page_state(driver)
+        print(f"[登录] 修改密码页面状态: {verification_state}")
+        
+        if verification_state == "need_security_verification":
+            print(f"[登录] ⚠️ 检测到需要安全验证")
+            return "success_with_verification", "登录成功，但需要安全验证"
+        else:
+            print(f"[登录] ✅ 无需安全验证，登录成功")
+            return "success", "登录成功"
+    except Exception as e:
+        print(f"[登录警告] 跳转修改密码页面失败: {str(e)}，默认为登录成功")
+        return "success", "登录成功"
+
+
 def handle_choose_account_page(driver, account_email):
     """处理选择账号页面 - 点击对应的账号
     
@@ -1621,7 +1689,13 @@ def perform_login(driver, account, password, account_id=None, backup_email=None)
                 return "failed", "浏览器连接失败，可能已被关闭"
             
             if current_state == "logged_in":
-                return "success", "已登录状态"
+                # 登录成功后，检测安全验证
+                return check_password_page_security_verification(driver)
+            
+            elif current_state == "need_security_verification":
+                # 登录成功但需要安全验证
+                print(f"[登录] ⚠️ 登录成功，但需要安全验证（可能需要原设备或其他验证方式）")
+                return "success_with_verification", "登录成功，但需要安全验证"
             
             elif current_state == "choose_account":
                 # 处理选择账号页面
@@ -1629,7 +1703,8 @@ def perform_login(driver, account, password, account_id=None, backup_email=None)
                 status = handle_choose_account_page(driver, account)
                 
                 if status == "success":
-                    return "success", "选择账号成功，已登录"
+                    # 选择账号成功后，检测安全验证
+                    return check_password_page_security_verification(driver)
                 elif status == "continue":
                     # 继续下一轮检测
                     print(f"[登录] 选择账号完成，继续检测后续状态...")
@@ -1697,7 +1772,7 @@ def perform_login(driver, account, password, account_id=None, backup_email=None)
                 status = handle_password_page(driver, password)
                 
                 if status == "success":
-                    return "success", "登录成功"
+                    return check_password_page_security_verification(driver)
                 elif status == "need_phone":
                     # 不直接返回，而是继续循环让下一轮处理手机验证
                     print(f"[登录] 密码处理后需要手机验证，继续下一轮循环处理...")
@@ -1722,7 +1797,7 @@ def perform_login(driver, account, password, account_id=None, backup_email=None)
                 status = handle_verify_identity_page(driver, backup_email)
                 
                 if status == "success":
-                    return "success", "验证成功，已登录"
+                    return check_password_page_security_verification(driver)
                 elif status == "continue":
                     # 继续下一轮检测
                     print(f"[登录] 验证身份完成，继续检测后续状态...")
@@ -1738,7 +1813,7 @@ def perform_login(driver, account, password, account_id=None, backup_email=None)
                 status = handle_passkey_enrollment_page(driver)
                 
                 if status == "success":
-                    return "success", "Passkey 跳过成功，已登录"
+                    return check_password_page_security_verification(driver)
                 elif status == "continue":
                     # 继续下一轮检测
                     print(f"[登录] Passkey 跳过完成，继续检测后续状态...")
@@ -1752,14 +1827,14 @@ def perform_login(driver, account, password, account_id=None, backup_email=None)
                 status = handle_verify_click_next_page(driver)
                 
                 if status == "success":
-                    return "success", "验证成功，已登录"
+                    return check_password_page_security_verification(driver)
                 elif status == "need_captcha":
                     # 进入人机验证流程
                     print(f"[登录] 检测到人机验证，开始处理...")
                     captcha_status = handle_captcha_page(driver)
                     
                     if captcha_status == "success":
-                        return "success", "人机验证成功，已登录"
+                        return check_password_page_security_verification(driver)
                     elif captcha_status == "continue":
                         # 继续下一轮检测
                         print(f"[登录] 人机验证完成，继续检测后续状态...")
@@ -1784,7 +1859,7 @@ def perform_login(driver, account, password, account_id=None, backup_email=None)
                 status = handle_captcha_page(driver)
                 
                 if status == "success":
-                    return "success", "人机验证成功，已登录"
+                    return check_password_page_security_verification(driver)
                 elif status == "continue":
                     # 继续下一轮检测
                     print(f"[登录] 人机验证完成，继续检测后续状态...")
@@ -1803,7 +1878,7 @@ def perform_login(driver, account, password, account_id=None, backup_email=None)
                 status = handle_recovery_options_page(driver, account_id)
                 
                 if status == "success":
-                    return "success", "恢复选项设置成功，已登录"
+                    return check_password_page_security_verification(driver)
                 elif status == "continue":
                     # 继续下一轮检测
                     print(f"[登录] 恢复选项设置完成，继续检测后续状态...")
@@ -1820,7 +1895,8 @@ def perform_login(driver, account, password, account_id=None, backup_email=None)
                 status = handle_home_address_page(driver)
                 
                 if status == "success":
-                    return "success", "设置住址跳过成功，已登录"
+                    # 住址设置成功后，检测安全验证
+                    return check_password_page_security_verification(driver)
                 elif status == "continue":
                     # 继续下一轮检测
                     print(f"[登录] 设置住址跳过完成，继续检测后续状态...")
@@ -1835,7 +1911,7 @@ def perform_login(driver, account, password, account_id=None, backup_email=None)
                 status = handle_phone_verification(driver, account_id)
                 
                 if status == "success":
-                    return "success", "手机号验证成功，已登录"
+                    return check_password_page_security_verification(driver)
                 elif status == "continue":
                     # 继续下一轮检测
                     print(f"[登录] 手机号验证完成，继续检测后续状态...")
@@ -1955,7 +2031,8 @@ def auto_login_task(app, account_id):
             
             # 更新账号状态
             account.login_status = status
-            account.status = (status == 'success')
+            # success 和 success_with_verification 都算成功
+            account.status = (status in ['success', 'success_with_verification'])
             db.session.commit()
             
             add_login_log(account_id, browser_env.container_code, 'auto_login', status, message)
