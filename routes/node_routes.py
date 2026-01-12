@@ -170,3 +170,4 @@ def get_available_nodes_count():
     count = Node.query.filter_by(status=False).count()
     return jsonify({'code': 0, 'count': count})
 
+

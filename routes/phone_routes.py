@@ -187,3 +187,4 @@ def download_phones_template():
     return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                      as_attachment=True, download_name='手机号导入模板.xlsx')
 
+

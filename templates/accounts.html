@@ -44,21 +44,23 @@
 </div>
 
 <!-- 数据表格 -->
-<div class="table-container">
-    <table class="data-table" id="data-table">
+<div class="table-container" style="overflow-x: auto;">
+    <table class="data-table" id="data-table" style="min-width: 1400px;">
         <thead>
             <tr>
-                <th class="checkbox-cell">
+                <th class="checkbox-cell" style="white-space: nowrap;">
                     <input type="checkbox" class="checkbox" id="select-all" onchange="toggleSelectAll(this)">
                 </th>
-                <th>账号</th>
-                <th>密码</th>
-                <th>辅助邮箱</th>
-                <th>手机号</th>
-                <th>登录状态</th>
-                <th>环境ID</th>
-                <th>创建时间</th>
-                <th class="actions-cell">操作</th>
+                <th style="white-space: nowrap; min-width: 180px;">账号</th>
+                <th style="white-space: nowrap; min-width: 150px;">密码</th>
+                <th style="white-space: nowrap; min-width: 180px;">辅助邮箱</th>
+                <th style="white-space: nowrap; min-width: 120px;">手机号</th>
+                <th style="white-space: nowrap; min-width: 90px;">登录状态</th>
+                <th style="white-space: nowrap; min-width: 90px;">频道状态</th>
+                <th style="white-space: nowrap; min-width: 100px;">频道链接</th>
+                <th style="white-space: nowrap; min-width: 120px;">环境ID</th>
+                <th style="white-space: nowrap; min-width: 100px;">创建时间</th>
+                <th class="actions-cell" style="white-space: nowrap; min-width: 180px;">操作</th>
             </tr>
         </thead>
         <tbody id="table-body">
@@ -112,6 +114,34 @@
     .login-status-tag.disabled { background: #fee2e2; color: #dc2626; }
     .login-status-tag.failed { background: #fee2e2; color: #dc2626; }
     
+    /* 频道状态样式 */
+    .channel-status-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 14px;
+        font-weight: 500;
+    }
+    .channel-status-tag.not_created { background: #f3f4f6; color: #6b7280; }
+    .channel-status-tag.created { background: #d1fae5; color: #059669; }
+    .channel-status-tag.failed { background: #fee2e2; color: #dc2626; }
+    
+    .channel-url-cell {
+        max-width: 150px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .channel-url-cell a {
+        color: #2563eb;
+        text-decoration: none;
+    }
+    .channel-url-cell a:hover {
+        text-decoration: underline;
+    }
+    
     .env-id-cell {
         font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
         font-size: 14px;
@@ -131,6 +161,8 @@
     
     .action-btn.login { color: #2563eb; }
     .action-btn.login:hover { background: #dbeafe; }
+    .action-btn.channel { color: #ef4444; }
+    .action-btn.channel:hover { background: #fee2e2; }
     .action-btn.log { color: #8b5cf6; }
     .action-btn.log:hover { background: #ede9fe; }
     .action-btn.reset { color: #f59e0b; }
@@ -223,6 +255,12 @@
         'disabled': '账号禁用',
         'failed': '登录失败'
     };
+    
+    const CHANNEL_STATUS_MAP = {
+        'not_created': '未创建',
+        'created': '已创建',
+        'failed': '创建失败'
+    };
 
     // 页面加载时获取数据
     document.addEventListener('DOMContentLoaded', () => {
@@ -259,6 +297,10 @@
             const loginStatusText = LOGIN_STATUS_MAP[loginStatus] || '未知';
             const isLogging = loginStatus === 'logging';
             
+            const channelStatus = item.channel_status || 'not_created';
+            const channelStatusText = CHANNEL_STATUS_MAP[channelStatus] || '未创建';
+            const channelUrl = item.channel_url || '';
+            
             return `
             <tr data-id="${item.id}">
                 <td class="checkbox-cell">
@@ -274,6 +316,14 @@
                         ${loginStatusText}
                     </span>
                 </td>
+                <td>
+                    <span class="channel-status-tag ${channelStatus}">
+                        ${channelStatusText}
+                    </span>
+                </td>
+                <td class="channel-url-cell" title="${escapeHtml(channelUrl)}">
+                    ${channelUrl ? `<a href="${escapeHtml(channelUrl)}" target="_blank">查看频道</a>` : '-'}
+                </td>
                 <td class="env-id-cell" title="${escapeHtml(item.browser_env_id || '')}">${escapeHtml(item.browser_env_id || '-')}</td>
                 <td>${item.created_at}</td>
                 <td class="actions-cell">
@@ -283,6 +333,9 @@
                         </button>
                         ${isLogging ? `<button class="action-btn reset" onclick="resetLoginStatus(${item.id})" title="重置登录状态" style="color: #f59e0b;">
                             <i data-lucide="refresh-cw"></i>
+                        </button>` : ''}
+                        ${(loginStatus === 'success' || loginStatus === 'success_with_verification') && channelStatus !== 'created' ? `<button class="action-btn channel" onclick="createChannel(${item.id})" title="创建频道" style="color: #ef4444;">
+                            <i data-lucide="video"></i>
                         </button>` : ''}
                         <button class="action-btn log" onclick="viewLogs(${item.id})" title="查看日志">
                             <i data-lucide="file-text"></i>
@@ -689,6 +742,36 @@
         
         // 重新渲染图标
         setTimeout(() => lucide.createIcons(), 100);
+    }
+    
+    // 创建YouTube频道
+    async function createChannel(id) {
+        if (!confirm('确定要为这个账号创建YouTube频道吗？\n\n注意：\n1. 账号必须已登录成功\n2. 需要配置头像文件夹路径\n3. 频道名称将随机生成\n4. 创建成功后会删除使用的头像')) return;
+        
+        try {
+            // 首先检查头像可用性
+            const checkRes = await fetch('/api/channels/check-avatar-availability');
+            const checkResult = await checkRes.json();
+            
+            if (checkResult.code !== 0) {
+                showToast(checkResult.message, 'error');
+                return;
+            }
+            
+            // 开始创建频道
+            const res = await fetch(`/api/channels/${id}/create-channel`, {
+                method: 'POST'
+            });
+            const result = await res.json();
+            
+            if (result.code === 0) {
+                showToast(result.message, 'success');
+            } else {
+                showToast(result.message || '创建频道失败', 'error');
+            }
+        } catch (error) {
+            showToast('创建频道失败', 'error');
+        }
     }
 </script>
 {% endblock %}

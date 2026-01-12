@@ -1,0 +1,17 @@
+{
+  "mysql": {
+    "host": "localhost",
+    "port": 3306,
+    "user": "root",
+    "password": "your_password_here",
+    "database": "google_account"
+  },
+  "hubstudio": {
+    "base_url": "http://localhost:6873",
+    "app_id": "your_app_id_here",
+    "app_secret": "your_app_secret_here"
+  },
+  "channel_avatar_path": "C:\\path\\to\\your\\avatar\\folder"
+}
+
+

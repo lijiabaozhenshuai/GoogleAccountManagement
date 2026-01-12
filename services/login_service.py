@@ -1362,20 +1362,30 @@ def get_available_phone(account_id=None):
         return None
 
 
-def get_sms_code(sms_url, max_retries=12, interval=10):
+def get_sms_code(sms_url, max_retries=12, interval=10, request_time=None):
     """从接码URL获取验证码
     
     Args:
         sms_url: 接码URL
         max_retries: 最大重试次数，默认12次
         interval: 重试间隔（秒），默认10秒
+        request_time: 请求验证码的时间（datetime对象），只获取此时间之后的验证码
     
     Returns:
         str: 验证码，如 "123456"，失败返回 None
     """
+    from datetime import datetime
+    
     try:
         print(f"[验证码] 开始从接码URL获取验证码...")
         print(f"[验证码] URL: {sms_url}")
+        
+        # 如果没有传入请求时间，使用当前时间减去5秒作为基准
+        if request_time is None:
+            request_time = datetime.now()
+            print(f"[验证码] 未指定请求时间，使用当前时间: {request_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        else:
+            print(f"[验证码] 只获取 {request_time.strftime('%Y-%m-%d %H:%M:%S')} 之后的验证码")
         
         for attempt in range(max_retries):
             try:
@@ -1385,16 +1395,57 @@ def get_sms_code(sms_url, max_retries=12, interval=10):
                 response = requests.get(sms_url, timeout=30)
                 if response.status_code == 200:
                     content = response.text
-                    print(f"[验证码] 获取到内容: {content[:200] if len(content) > 200 else content}")
+                    print(f"[验证码] 获取到内容: {content[:300] if len(content) > 300 else content}")
                     
-                    # 从内容中提取验证码，格式如 "G-123456"
-                    match = re.search(r'G-(\d{5,6})', content)
-                    if match:
-                        code = match.group(1)
-                        print(f"[验证码] ✅ 成功获取验证码: {code}")
-                        return code
-                    else:
-                        print(f"[验证码] 未找到验证码格式 G-XXXXXX，继续等待...")
+                    # 尝试解析JSON格式的响应
+                    try:
+                        data = response.json()
+                        if isinstance(data, dict) and 'messages' in data:
+                            messages = data.get('messages', [])
+                            print(f"[验证码] 检测到JSON格式，共 {len(messages)} 条消息")
+                            
+                            # 遍历消息，找到请求时间之后的最新验证码
+                            for msg_item in messages:
+                                msg_text = msg_item.get('msg', '')
+                                rec_time_str = msg_item.get('rec_time', '')
+                                
+                                # 解析消息时间
+                                try:
+                                    msg_time = datetime.strptime(rec_time_str, '%Y-%m-%d %H:%M:%S')
+                                except:
+                                    print(f"[验证码] 无法解析消息时间: {rec_time_str}")
+                                    continue
+                                
+                                # 检查消息时间是否在请求时间之后
+                                if msg_time >= request_time:
+                                    # 提取验证码
+                                    match = re.search(r'G-(\d{5,6})', msg_text)
+                                    if match:
+                                        code = match.group(1)
+                                        print(f"[验证码] ✅ 找到有效验证码: {code} (时间: {rec_time_str})")
+                                        return code
+                                else:
+                                    print(f"[验证码] 跳过旧消息 (时间: {rec_time_str}，早于请求时间)")
+                            
+                            print(f"[验证码] 未找到请求时间之后的有效验证码，继续等待...")
+                        else:
+                            # 非标准JSON格式，使用旧的正则匹配方式
+                            match = re.search(r'G-(\d{5,6})', content)
+                            if match:
+                                code = match.group(1)
+                                print(f"[验证码] ✅ 成功获取验证码: {code}")
+                                return code
+                            else:
+                                print(f"[验证码] 未找到验证码格式 G-XXXXXX，继续等待...")
+                    except (ValueError, TypeError):
+                        # 不是JSON格式，使用旧的正则匹配方式
+                        match = re.search(r'G-(\d{5,6})', content)
+                        if match:
+                            code = match.group(1)
+                            print(f"[验证码] ✅ 成功获取验证码: {code}")
+                            return code
+                        else:
+                            print(f"[验证码] 未找到验证码格式 G-XXXXXX，继续等待...")
                 else:
                     print(f"[验证码] 请求失败，状态码: {response.status_code}")
                 
@@ -1464,6 +1515,11 @@ def handle_phone_verification(driver, account_id):
             next_button.click()
             print(f"[手机验证] 已点击下一步")
             
+            # 记录点击下一步的时间（用于过滤旧验证码）
+            from datetime import datetime
+            sms_request_time = datetime.now()
+            print(f"[手机验证] 记录请求时间: {sms_request_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            
             # 等待验证码输入框出现
             time.sleep(5)
             
@@ -1476,7 +1532,7 @@ def handle_phone_verification(driver, account_id):
         
         # 3. 获取验证码
         print(f"[手机验证] 开始获取验证码...")
-        sms_code = get_sms_code(phone.sms_url, max_retries=12, interval=10)
+        sms_code = get_sms_code(phone.sms_url, max_retries=12, interval=10, request_time=sms_request_time)
         if not sms_code:
             print(f"[手机验证错误] 获取验证码失败")
             return "sms_code_failed"

@@ -33,6 +33,8 @@ class Account(db.Model):
     status = db.Column(db.Boolean, default=False, comment='状态：是否使用')
     login_status = db.Column(db.String(50), default='not_logged', comment='登录状态')
     browser_env_id = db.Column(db.String(100), nullable=True, comment='浏览器环境ID')
+    channel_status = db.Column(db.String(50), default='not_created', comment='频道状态：not_created/created/failed')
+    channel_url = db.Column(db.String(500), nullable=True, comment='频道链接')
     created_at = db.Column(db.DateTime, default=datetime.now, comment='创建时间')
     updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now, comment='更新时间')
     
@@ -42,6 +44,12 @@ class Account(db.Model):
     phone = db.relationship('Phone', backref='bound_account', foreign_keys=[phone_id])
     
     def to_dict(self):
+        # 频道状态映射
+        channel_status_map = {
+            'not_created': '未创建',
+            'created': '创建成功',
+            'failed': '创建失败',
+        }
         return {
             'id': self.id,
             'account': self.account,
@@ -53,6 +61,9 @@ class Account(db.Model):
             'login_status': self.login_status or 'not_logged',
             'login_status_text': LOGIN_STATUS.get(self.login_status, '未知'),
             'browser_env_id': self.browser_env_id or '',
+            'channel_status': self.channel_status or 'not_created',
+            'channel_status_text': channel_status_map.get(self.channel_status, '未创建'),
+            'channel_url': self.channel_url or '',
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else '',
             'updated_at': self.updated_at.strftime('%Y-%m-%d %H:%M:%S') if self.updated_at else '',
         }
