@@ -152,6 +152,18 @@ def create_channel(account_id):
                             if login_status not in ['success', 'success_with_verification']:
                                 error_msg = f'自动登录失败: {login_message}'
                                 print(f"[创建频道错误] {error_msg}")
+                                
+                                # 更新账号登录状态（根据登录结果设置）
+                                if login_status == 'disabled':
+                                    acc.login_status = 'disabled'
+                                elif login_status == 'need_2fa':
+                                    acc.login_status = 'need_2fa'
+                                elif login_status == 'password_error':
+                                    acc.login_status = 'password_error'
+                                else:
+                                    acc.login_status = 'failed'
+                                db.session.commit()
+                                
                                 log = LoginLog(
                                     account_id=account_id,
                                     browser_env_id=browser_env_id,

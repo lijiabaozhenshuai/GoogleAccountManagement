@@ -136,6 +136,11 @@ def detect_login_page_state(driver):
             print(f"[状态检测] 检测到手机验证页面")
             return "need_phone"
         
+        # 检查是否是需要点击Send发送验证码的手机验证页面（ipp/consent）
+        if "ipp/consent" in current_url:
+            print(f"[状态检测] 检测到需要点击Send发送验证码的手机验证页面")
+            return "need_phone_consent"
+        
         # 检查是否需要2FA
         if "challenge/totp" in current_url or "challenge/ipp" in current_url or "2step" in current_url:
             print(f"[状态检测] 检测到2FA验证页面")
@@ -1636,6 +1641,210 @@ def handle_phone_verification(driver, account_id):
         return "error"
 
 
+def handle_phone_consent_page(driver, account_id):
+    """处理需要点击Send发送验证码的手机验证页面（ipp/consent页面）
+    
+    这个页面已经显示了手机号，只需要点击Send按钮发送验证码，然后输入验证码
+    
+    Args:
+        driver: Selenium WebDriver
+        account_id: 账号ID
+    
+    Returns:
+        str: 处理结果 "success"/"no_phone"/"failed"
+    """
+    try:
+        print(f"[手机验证-Send] 开始处理需要点击Send的手机验证页面...")
+        
+        # 1. 获取可用手机号（用于获取验证码）
+        phone = get_available_phone(account_id)
+        if not phone:
+            print(f"[手机验证-Send错误] 没有可用的手机号")
+            return "no_phone"
+        
+        if not phone.sms_url:
+            print(f"[手机验证-Send错误] 手机号 {phone.phone_number} 没有配置接码URL")
+            return "no_sms_url"
+        
+        # 2. 查找并点击Send按钮
+        try:
+            print(f"[手机验证-Send] 查找Send按钮...")
+            
+            # 尝试多种方式查找Send按钮
+            send_button = None
+            button_selectors = [
+                "//button[contains(., 'Send')]",
+                "//button[.//span[contains(text(), 'Send')]]",
+                "//span[contains(text(), 'Send')]/ancestor::button",
+                "//div[@role='button' and contains(., 'Send')]",
+                "//button[@jsname='LgbsSe']",
+                "//button[contains(@class, 'send')]",
+            ]
+            
+            for selector in button_selectors:
+                try:
+                    send_button = WebDriverWait(driver, 5).until(
+                        EC.element_to_be_clickable((By.XPATH, selector))
+                    )
+                    if send_button:
+                        print(f"[手机验证-Send] 找到Send按钮，使用选择器: {selector}")
+                        break
+                except:
+                    continue
+            
+            if not send_button:
+                print(f"[手机验证-Send错误] 未找到Send按钮")
+                return "send_button_not_found"
+            
+            # 记录点击Send的时间（用于过滤旧验证码）
+            from datetime import datetime
+            sms_request_time = datetime.now()
+            print(f"[手机验证-Send] 记录请求时间: {sms_request_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            
+            # 点击Send按钮
+            try:
+                send_button.click()
+                print(f"[手机验证-Send] 已点击Send按钮")
+            except:
+                driver.execute_script("arguments[0].click();", send_button)
+                print(f"[手机验证-Send] 已点击Send按钮（JS方式）")
+            
+            # 等待验证码发送
+            time.sleep(5)
+            
+        except Exception as e:
+            error_msg = f"点击Send按钮失败: {str(e)}"
+            print(f"[手机验证-Send错误] {error_msg}")
+            import traceback
+            traceback.print_exc()
+            return "click_send_failed"
+        
+        # 3. 获取验证码
+        print(f"[手机验证-Send] 开始获取验证码...")
+        sms_code = get_sms_code(phone.sms_url, max_retries=12, interval=10, request_time=sms_request_time)
+        if not sms_code:
+            print(f"[手机验证-Send错误] 获取验证码失败")
+            return "sms_code_failed"
+        
+        # 4. 查找并输入验证码
+        try:
+            print(f"[手机验证-Send] 查找验证码输入框...")
+            
+            # 尝试多种方式查找验证码输入框
+            code_input = None
+            input_selectors = [
+                "//input[@type='tel']",
+                "//input[@id='code']",
+                "//input[contains(@name, 'code')]",
+                "//input[contains(@name, 'pin')]",
+                "//input[@type='text' and contains(@aria-label, 'code')]",
+                "//input[@autocomplete='one-time-code']",
+            ]
+            
+            for selector in input_selectors:
+                try:
+                    code_input = WebDriverWait(driver, 5).until(
+                        EC.presence_of_element_located((By.XPATH, selector))
+                    )
+                    if code_input:
+                        print(f"[手机验证-Send] 找到验证码输入框，使用选择器: {selector}")
+                        break
+                except:
+                    continue
+            
+            if not code_input:
+                print(f"[手机验证-Send错误] 未找到验证码输入框")
+                return "code_input_not_found"
+            
+            print(f"[手机验证-Send] 输入验证码: {sms_code}")
+            code_input.clear()
+            code_input.send_keys(sms_code)
+            time.sleep(2)
+            
+            # 点击"下一步"或"验证"按钮
+            print(f"[手机验证-Send] 查找并点击验证按钮...")
+            try:
+                verify_button = WebDriverWait(driver, 10).until(
+                    EC.element_to_be_clickable((By.XPATH, 
+                        "//button[@type='button']//span[contains(text(), 'Next') or contains(text(), '下一步') or contains(text(), 'Verify') or contains(text(), '验证')]"
+                    ))
+                )
+                verify_button.click()
+                print(f"[手机验证-Send] 已点击验证按钮")
+            except:
+                # 有些页面可能自动提交
+                print(f"[手机验证-Send] 未找到验证按钮，可能自动提交")
+            
+            # 等待页面跳转
+            time.sleep(5)
+            
+            # 5. 检查结果
+            current_url = driver.current_url
+            print(f"[手机验证-Send] 验证后 URL: {current_url}")
+            
+            if "myaccount.google.com" in current_url:
+                print(f"[手机验证-Send] ✅ 验证成功，已登录")
+                
+                # 更新数据库
+                try:
+                    if not phone.status:
+                        phone.status = True
+                        print(f"[手机验证-Send] 标记手机号为已使用")
+                    
+                    account = Account.query.get(account_id)
+                    if account and account.phone_id != phone.id:
+                        account.phone_id = phone.id
+                        print(f"[手机验证-Send] 已绑定手机号到账号")
+                    
+                    db.session.commit()
+                except Exception as e:
+                    print(f"[手机验证-Send警告] 更新数据库失败: {str(e)}")
+                
+                return "success"
+            else:
+                # 检查是否还在验证页面（可能验证码错误）
+                try:
+                    error_element = driver.find_element(By.XPATH, "//span[contains(text(), 'wrong') or contains(text(), 'incorrect') or contains(text(), '错误')]")
+                    if error_element:
+                        print(f"[手机验证-Send错误] 验证码错误")
+                        return "code_error"
+                except:
+                    pass
+                
+                print(f"[手机验证-Send] 验证完成，继续后续流程")
+                
+                # 更新数据库
+                try:
+                    if not phone.status:
+                        phone.status = True
+                        print(f"[手机验证-Send] 标记手机号为已使用")
+                    
+                    account = Account.query.get(account_id)
+                    if account and account.phone_id != phone.id:
+                        account.phone_id = phone.id
+                        print(f"[手机验证-Send] 已绑定手机号到账号")
+                    
+                    db.session.commit()
+                except Exception as e:
+                    print(f"[手机验证-Send警告] 更新数据库失败: {str(e)}")
+                
+                return "continue"
+                
+        except Exception as e:
+            error_msg = f"输入验证码失败: {str(e)}"
+            print(f"[手机验证-Send错误] {error_msg}")
+            import traceback
+            traceback.print_exc()
+            return "input_code_failed"
+            
+    except Exception as e:
+        error_msg = f"处理手机验证（Send页面）失败: {str(e)}"
+        print(f"[手机验证-Send错误] {error_msg}")
+        import traceback
+        traceback.print_exc()
+        return "error"
+
+
 def handle_password_page(driver, password):
     """处理密码页面"""
     try:
@@ -1669,6 +1878,9 @@ def handle_password_page(driver, password):
         elif "speedbump/idvreenable" in current_url or "challenge/dp" in current_url or "challenge/iap" in current_url:
             print(f"[密码页面] 检测到手机验证页面")
             return "need_phone"
+        elif "ipp/consent" in current_url:
+            print(f"[密码页面] 检测到需要点击Send发送验证码的手机验证页面")
+            return "need_phone_consent"
         elif "2step" in current_url or "challenge/totp" in current_url or "challenge/ipp" in current_url:
             print(f"[密码页面] 检测到二次验证页面")
             return "need_2fa"
@@ -2008,6 +2220,29 @@ def perform_login(driver, account, password, account_id=None, backup_email=None)
                     return "failed", "获取验证码失败（超过12次重试）"
                 else:
                     return "failed", f"手机号验证失败: {status}"
+            
+            elif current_state == "need_phone_consent":
+                # 处理需要点击Send发送验证码的手机验证页面（ipp/consent）
+                print(f"[登录] 开始处理需要点击Send的手机验证页面...")
+                status = handle_phone_consent_page(driver, account_id)
+                
+                if status == "success":
+                    return check_password_page_security_verification(driver)
+                elif status == "continue":
+                    # 继续下一轮检测
+                    print(f"[登录] 手机验证（Send页面）完成，继续检测后续状态...")
+                    time.sleep(2)
+                    continue
+                elif status == "no_phone":
+                    return "failed", "需要手机号验证，但没有可用的手机号"
+                elif status == "no_sms_url":
+                    return "failed", "手机号没有配置接码URL"
+                elif status == "sms_code_failed":
+                    return "failed", "获取验证码失败（超过12次重试）"
+                elif status == "send_button_not_found":
+                    return "failed", "未找到Send按钮"
+                else:
+                    return "failed", f"手机验证（Send页面）失败: {status}"
             
             elif current_state == "need_2fa":
                 return "need_2fa", "需要2FA验证"
