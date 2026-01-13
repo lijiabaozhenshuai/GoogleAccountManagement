@@ -175,6 +175,131 @@ def add_channel_log(account_id, browser_env_id, status, message):
         print(f"[日志错误] 添加日志失败: {str(e)}")
 
 
+def detect_monetization_requirement(driver, channel_url, account_id=None, browser_env_id=None):
+    """检测YouTube创收要求（3m还是10m）
+    
+    Args:
+        driver: Selenium WebDriver
+        channel_url: 频道URL
+        account_id: 账号ID（用于日志记录）
+        browser_env_id: 浏览器环境ID（用于日志记录）
+    
+    Returns:
+        str: "3m" 或 "10m" 或 None（检测失败）
+    """
+    try:
+        print(f"[创收检测] 开始检测创收要求...")
+        add_channel_log(account_id, browser_env_id, 'info', '开始检测创收要求')
+        
+        # 从频道URL提取频道ID
+        channel_id = None
+        if "channel/" in channel_url:
+            channel_id = channel_url.split("channel/")[1].split("/")[0].split("?")[0]
+        elif "studio.youtube.com" in channel_url and "UC" in channel_url:
+            # 从studio URL中提取
+            parts = channel_url.split("/")
+            for part in parts:
+                if part.startswith("UC"):
+                    channel_id = part
+                    break
+        
+        if not channel_id:
+            print(f"[创收检测] 无法从URL中提取频道ID: {channel_url}")
+            add_channel_log(account_id, browser_env_id, 'warning', f'无法从URL中提取频道ID')
+            return None
+        
+        # 构建创收页面URL
+        monetization_url = f"https://studio.youtube.com/channel/{channel_id}/monetization/overview"
+        print(f"[创收检测] 导航到创收页面: {monetization_url}")
+        add_channel_log(account_id, browser_env_id, 'info', f'导航到创收页面')
+        
+        driver.get(monetization_url)
+        time.sleep(8)  # 等待页面加载
+        
+        # 方法1：精确定位 shorts-progress 区域的 threshold 元素（最准确）
+        threshold_value = None
+        try:
+            print(f"[创收检测] 尝试方法1: 定位shorts-progress中的threshold元素...")
+            # 使用XPath精确定位shorts区域的threshold
+            shorts_threshold = driver.find_element(
+                By.XPATH, 
+                "//div[contains(@class, 'shorts-progress')]//span[contains(@class, 'threshold')]"
+            )
+            threshold_value = shorts_threshold.text.strip()
+            print(f"[创收检测] ✅ 方法1成功 - Shorts threshold值: {threshold_value}")
+        except Exception as e:
+            print(f"[创收检测] 方法1失败: {str(e)}")
+        
+        # 方法2：通过ID定位（备用方案）
+        if not threshold_value:
+            try:
+                print(f"[创收检测] 尝试方法2: 通过shorts-count ID定位...")
+                shorts_count_elem = driver.find_element(By.ID, "shorts-count")
+                # 找到父容器，然后找threshold
+                parent_div = shorts_count_elem.find_element(By.XPATH, "./ancestor::div[contains(@class, 'shorts-progress')]")
+                shorts_threshold = parent_div.find_element(By.XPATH, ".//span[contains(@class, 'threshold')]")
+                threshold_value = shorts_threshold.text.strip()
+                print(f"[创收检测] ✅ 方法2成功 - Shorts threshold值: {threshold_value}")
+            except Exception as e:
+                print(f"[创收检测] 方法2失败: {str(e)}")
+        
+        # 方法3：获取所有threshold元素，取第三个（subscribers、watch、shorts）
+        if not threshold_value:
+            try:
+                print(f"[创收检测] 尝试方法3: 获取所有threshold元素...")
+                all_thresholds = driver.find_elements(By.XPATH, "//span[contains(@class, 'threshold')]")
+                if len(all_thresholds) >= 3:
+                    # 第1个是subscribers (1,000)
+                    # 第2个是watch hours (4,000)
+                    # 第3个是shorts (3M 或 10M)
+                    threshold_value = all_thresholds[2].text.strip()
+                    print(f"[创收检测] ✅ 方法3成功 - Shorts threshold值: {threshold_value}")
+                else:
+                    print(f"[创收检测] 方法3失败: threshold元素数量不足 ({len(all_thresholds)})")
+            except Exception as e:
+                print(f"[创收检测] 方法3失败: {str(e)}")
+        
+        # 判断结果
+        if not threshold_value:
+            print(f"[创收检测] ⚠️ 无法获取threshold值")
+            add_channel_log(account_id, browser_env_id, 'warning', '无法获取Shorts threshold值')
+            return None
+        
+        # 清理和标准化threshold值
+        threshold_clean = threshold_value.upper().replace(',', '').replace('.', '').replace(' ', '')
+        print(f"[创收检测] 标准化后的threshold值: {threshold_clean}")
+        
+        # 判断是3m还是10m
+        import re
+        result = None
+        
+        # 检测3M相关
+        # 匹配: 3M, 3000000, 300万, 3 million, 3 triệu 等
+        if re.search(r'3M|3000000|300万|3MILLION|3TRIỆU', threshold_clean):
+            result = "3m"
+            print(f"[创收检测] ✅ 检测结果: 3m (300万) - threshold值: {threshold_value}")
+            add_channel_log(account_id, browser_env_id, 'success', f'检测到创收要求: 3m (300万) - 显示值: {threshold_value}')
+        # 检测10M相关
+        # 匹配: 10M, 10000000, 1000万, 10 million, 10 triệu 等
+        elif re.search(r'10M|10000000|1000万|10MILLION|10TRIỆU', threshold_clean):
+            result = "10m"
+            print(f"[创收检测] ✅ 检测结果: 10m (1000万) - threshold值: {threshold_value}")
+            add_channel_log(account_id, browser_env_id, 'success', f'检测到创收要求: 10m (1000万) - 显示值: {threshold_value}')
+        else:
+            print(f"[创收检测] ⚠️ 无法识别threshold值: {threshold_value}")
+            add_channel_log(account_id, browser_env_id, 'warning', f'无法识别threshold值: {threshold_value}')
+        
+        return result
+        
+    except Exception as e:
+        error_msg = f"检测创收要求失败: {str(e)}"
+        print(f"[创收检测错误] {error_msg}")
+        import traceback
+        traceback.print_exc()
+        add_channel_log(account_id, browser_env_id, 'failed', error_msg)
+        return None
+
+
 def create_youtube_channel(driver, account_id=None, browser_env_id=None):
     """创建YouTube频道
     
@@ -1838,19 +1963,34 @@ def create_youtube_channel(driver, account_id=None, browser_env_id=None):
                 channel_url = current_url
                 print(f"[频道创建] 频道链接: {channel_url}")
                 
-                # 15. 保存频道信息到数据库
+                # 15. 检测创收要求（3m或10m）
+                monetization_req = None
+                try:
+                    print(f"[频道创建] 开始检测创收要求...")
+                    monetization_req = detect_monetization_requirement(driver, channel_url, account_id, browser_env_id)
+                    if monetization_req:
+                        print(f"[频道创建] ✅ 创收要求检测成功: {monetization_req}")
+                    else:
+                        print(f"[频道创建] ⚠️ 创收要求检测失败，将保存为空")
+                except Exception as detect_error:
+                    print(f"[频道创建警告] 检测创收要求失败: {str(detect_error)}")
+                    import traceback
+                    traceback.print_exc()
+                
+                # 16. 保存频道信息到数据库（包括创收要求）
                 try:
                     from models import Account
                     account = Account.query.get(account_id)
                     if account:
                         account.channel_status = 'created'
                         account.channel_url = channel_url
+                        account.monetization_requirement = monetization_req
                         db.session.commit()
-                        print(f"[频道创建] ✅ 已保存频道信息到数据库")
+                        print(f"[频道创建] ✅ 已保存频道信息到数据库（创收要求: {monetization_req or '未检测到'}）")
                 except Exception as db_error:
                     print(f"[频道创建警告] 保存频道信息失败: {str(db_error)}")
                 
-                # 16. 删除使用的头像
+                # 17. 删除使用的头像
                 try:
                     if avatar_path and os.path.exists(avatar_path):
                         os.remove(avatar_path)
@@ -1859,7 +1999,7 @@ def create_youtube_channel(driver, account_id=None, browser_env_id=None):
                 except Exception as del_error:
                     print(f"[频道创建警告] 删除头像失败: {str(del_error)}")
                 
-                success_msg = f"频道创建成功！名称: {channel_name}, 链接: {channel_url}"
+                success_msg = f"频道创建成功！名称: {channel_name}, 链接: {channel_url}, 创收要求: {monetization_req or '未检测到'}"
                 add_channel_log(account_id, browser_env_id, 'success', success_msg)
                 return "success", success_msg
             else:

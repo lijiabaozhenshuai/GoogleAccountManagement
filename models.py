@@ -38,6 +38,7 @@ class Account(db.Model):
     browser_env_id = db.Column(db.String(100), nullable=True, comment='浏览器环境ID')
     channel_status = db.Column(db.String(50), default='not_created', comment='频道状态：not_created/created/failed')
     channel_url = db.Column(db.String(500), nullable=True, comment='频道链接')
+    monetization_requirement = db.Column(db.String(10), nullable=True, comment='创收次数要求：3m/10m')
     created_at = db.Column(db.DateTime, default=datetime.now, comment='创建时间')
     updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now, comment='更新时间')
     
@@ -67,6 +68,7 @@ class Account(db.Model):
             'channel_status': self.channel_status or 'not_created',
             'channel_status_text': channel_status_map.get(self.channel_status, '未创建'),
             'channel_url': self.channel_url or '',
+            'monetization_requirement': self.monetization_requirement or '',
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else '',
             'updated_at': self.updated_at.strftime('%Y-%m-%d %H:%M:%S') if self.updated_at else '',
         }

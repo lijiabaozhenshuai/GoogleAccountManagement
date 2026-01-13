@@ -58,6 +58,7 @@
                 <th style="white-space: nowrap; min-width: 90px;">登录状态</th>
                 <th style="white-space: nowrap; min-width: 90px;">频道状态</th>
                 <th style="white-space: nowrap; min-width: 100px;">频道链接</th>
+                <th style="white-space: nowrap; min-width: 90px;">创收要求</th>
                 <th style="white-space: nowrap; min-width: 120px;">环境ID</th>
                 <th style="white-space: nowrap; min-width: 100px;">创建时间</th>
                 <th class="actions-cell" style="white-space: nowrap; min-width: 180px;">操作</th>
@@ -130,6 +131,27 @@
     .channel-status-tag.not_created { background: #f3f4f6; color: #6b7280; }
     .channel-status-tag.created { background: #d1fae5; color: #059669; }
     .channel-status-tag.failed { background: #fee2e2; color: #dc2626; }
+    
+    /* 创收要求样式 */
+    .monetization-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 14px;
+        font-weight: 500;
+    }
+    .monetization-tag.req-3m { 
+        background: #d1fae5; 
+        color: #059669; 
+        border: 1px solid #059669;
+    }
+    .monetization-tag.req-10m { 
+        background: #fee2e2; 
+        color: #dc2626; 
+        border: 1px solid #dc2626;
+    }
     
     .channel-url-cell {
         max-width: 150px;
@@ -332,6 +354,11 @@
                 </td>
                 <td class="channel-url-cell" title="${escapeHtml(channelUrl)}">
                     ${channelUrl ? `<a href="${escapeHtml(channelUrl)}" target="_blank">查看频道</a>` : '-'}
+                </td>
+                <td>
+                    ${item.monetization_requirement ? 
+                        `<span class="monetization-tag req-${item.monetization_requirement}">${item.monetization_requirement.toUpperCase()}</span>` 
+                        : '-'}
                 </td>
                 <td class="env-id-cell" title="${escapeHtml(item.browser_env_id || '')}">${escapeHtml(item.browser_env_id || '-')}</td>
                 <td>${item.created_at}</td>
