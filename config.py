@@ -81,6 +81,9 @@ CAPTCHA_CONFIG = {
 # 频道头像路径配置（默认值）
 CHANNEL_AVATAR_PATH = ""
 
+# 申诉文案Excel路径配置（默认值）
+APPEAL_TEXT_PATH = ""
+
 # ==================== 从 JSON 文件加载配置 ====================
 def load_config_from_json():
     """从 config.json 文件加载配置并覆盖默认值"""
@@ -106,6 +109,11 @@ def load_config_from_json():
         if 'channel_avatar_path' in user_config:
             global CHANNEL_AVATAR_PATH
             CHANNEL_AVATAR_PATH = user_config['channel_avatar_path']
+        
+        # 更新申诉文案路径
+        if 'appeal_text_path' in user_config:
+            global APPEAL_TEXT_PATH
+            APPEAL_TEXT_PATH = user_config['appeal_text_path']
         
         print("✓ 成功从 config.json 加载配置")
     except json.JSONDecodeError as e:

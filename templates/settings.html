@@ -97,6 +97,29 @@
         </div>
     </div>
 
+    <!-- 申诉文案路径配置 -->
+    <div class="settings-card">
+        <div class="settings-card-header">
+            <i data-lucide="file-text"></i>
+            <h2>申诉文案路径配置</h2>
+        </div>
+        <div class="settings-card-body">
+            <form id="appeal-text-form" class="settings-form">
+                <div class="form-group">
+                    <label for="appeal-text-path">申诉文案Excel文件路径</label>
+                    <input type="text" id="appeal-text-path" name="path" placeholder="D:\appeal_texts.xlsx" required>
+                    <small class="form-hint">请输入存放申诉文案的Excel文件路径，申诉文案应在第二列（B列）</small>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="save"></i>
+                        保存申诉文案路径配置
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- 重启提示 -->
     <div class="alert alert-warning">
         <i data-lucide="alert-triangle"></i>
@@ -137,6 +160,11 @@
                 // 填充频道头像路径
                 if (config.channel_avatar_path !== undefined) {
                     document.getElementById('channel-avatar-path').value = config.channel_avatar_path;
+                }
+                
+                // 填充申诉文案路径
+                if (config.appeal_text_path !== undefined) {
+                    document.getElementById('appeal-text-path').value = config.appeal_text_path;
                 }
             } else {
                 showToast('加载配置失败: ' + result.message, 'error');
@@ -235,6 +263,39 @@
                 },
                 body: JSON.stringify({
                     type: 'channel_avatar',
+                    data: data
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                showToast(result.message, 'success');
+            } else {
+                showToast('保存失败: ' + result.message, 'error');
+            }
+        } catch (error) {
+            showToast('保存失败: ' + error.message, 'error');
+        }
+    });
+
+    // 保存申诉文案路径配置
+    document.getElementById('appeal-text-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const formData = new FormData(e.target);
+        const data = {
+            path: formData.get('path')
+        };
+        
+        try {
+            const response = await fetch('/api/settings/update-config', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    type: 'appeal_text',
                     data: data
                 })
             });

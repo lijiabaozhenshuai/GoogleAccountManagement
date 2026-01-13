@@ -11,7 +11,8 @@
     "app_id": "your_app_id_here",
     "app_secret": "your_app_secret_here"
   },
-  "channel_avatar_path": "C:\\path\\to\\your\\avatar\\folder"
+  "channel_avatar_path": "C:\\path\\to\\your\\avatar\\folder",
+  "appeal_text_path": "C:\\path\\to\\your\\appeal_text.xlsx"
 }
 
 

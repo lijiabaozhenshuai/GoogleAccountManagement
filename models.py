@@ -17,6 +17,9 @@ LOGIN_STATUS = {
     'need_phone': '需要绑定手机号',
     'need_2fa': '需要2FA验证',
     'disabled': '账号被禁用',
+    'need_appeal': '需要申诉',
+    'appeal_success': '已申诉成功',
+    'appeal_failed': '申诉失败',
     'failed': '登录失败',
 }
 

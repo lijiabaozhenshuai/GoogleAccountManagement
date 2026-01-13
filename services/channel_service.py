@@ -228,6 +228,31 @@ def create_youtube_channel(driver, account_id=None, browser_env_id=None):
         current_url = driver.current_url
         print(f"[频道创建] 当前URL: {current_url}")
         
+        # 3.1 检查是否遇到 Google 登录被拒绝页面 (signin/rejected)
+        if "signin/rejected" in current_url or "Couldn't sign you in" in driver.page_source:
+            print(f"[频道创建] ⚠️ 检测到Google登录被拒绝页面")
+            add_channel_log(account_id, browser_env_id, 'warning', '检测到登录被拒绝，尝试点击Try again')
+            
+            try:
+                # 查找并点击 "Try again" 按钮
+                try_again_btn = WebDriverWait(driver, 10).until(
+                    EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Try again') or contains(., '重试')]"))
+                )
+                try_again_btn.click()
+                print(f"[频道创建] ✅ 已点击 'Try again' 按钮")
+                add_channel_log(account_id, browser_env_id, 'info', '已点击Try again按钮，等待重新登录')
+                time.sleep(5)
+                
+                # 更新URL
+                current_url = driver.current_url
+                print(f"[频道创建] 点击Try again后URL: {current_url}")
+                
+            except Exception as e:
+                error_msg = f"点击Try again按钮失败: {str(e)}"
+                print(f"[频道创建错误] {error_msg}")
+                add_channel_log(account_id, browser_env_id, 'failed', error_msg)
+                return "failed", "登录被拒绝且无法点击Try again按钮"
+        
         # 检查是否需要处理额外的验证步骤
         if "accounts.google.com" in current_url:
             if "uplevelingstep" in current_url or "selection" in current_url:
@@ -429,7 +454,38 @@ def create_youtube_channel(driver, account_id=None, browser_env_id=None):
                 add_channel_log(account_id, browser_env_id, 'failed', '账号未登录，需要先登录')
                 return "failed", "账号未登录，请先完成登录"
         
-        # 4. 点击创建按钮（右上角的Create图标）
+        # 4. 检查登录状态（通过检测是否有login按钮）
+        print(f"[频道创建] 检查登录状态...")
+        try:
+            # 查找是否有 "Sign in" 或 "Login" 按钮
+            login_buttons = driver.find_elements(By.XPATH, 
+                "//a[contains(text(), 'Sign in') or contains(text(), 'Login') or contains(text(), '登录')] | " +
+                "//button[contains(text(), 'Sign in') or contains(text(), 'Login') or contains(text(), '登录')]"
+            )
+            
+            has_login_button = False
+            for btn in login_buttons:
+                try:
+                    if btn.is_displayed():
+                        has_login_button = True
+                        print(f"[频道创建] ⚠️ 检测到登录按钮，说明未登录")
+                        break
+                except:
+                    pass
+            
+            if has_login_button:
+                error_msg = "检测到页面有登录按钮，账号未登录，需要先完成登录"
+                print(f"[频道创建错误] {error_msg}")
+                add_channel_log(account_id, browser_env_id, 'failed', error_msg)
+                return "failed", error_msg
+            else:
+                print(f"[频道创建] ✅ 未检测到登录按钮，账号已登录")
+                add_channel_log(account_id, browser_env_id, 'info', '账号已登录，继续创建频道')
+                
+        except Exception as e:
+            print(f"[频道创建警告] 检查登录状态时出错: {str(e)}，继续执行")
+        
+        # 5. 点击创建按钮（右上角的Create图标）
         print(f"[频道创建] 查找并点击Create按钮...")
         add_channel_log(account_id, browser_env_id, 'info', '查找Create按钮')
         try:
@@ -469,7 +525,7 @@ def create_youtube_channel(driver, account_id=None, browser_env_id=None):
             if not create_button:
                 print(f"[频道创建错误] 未找到Create按钮")
                 add_channel_log(account_id, browser_env_id, 'failed', '未找到Create按钮')
-                return "failed", "未找到Create按钮，可能页面结构已改变或账号未登录"
+                return "failed", "未找到Create按钮，可能页面结构已改变"
             
             # 滚动到按钮可见
             driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", create_button)
@@ -495,7 +551,7 @@ def create_youtube_channel(driver, account_id=None, browser_env_id=None):
             traceback.print_exc()
             return "failed", error_msg
         
-        # 5. 在弹出菜单中找到并点击"Upload video"选项
+        # 6. 在弹出菜单中找到并点击"Upload video"选项
         print(f"[频道创建] 查找并点击'Upload video'选项...")
         try:
             # 查找菜单项
@@ -631,7 +687,7 @@ def create_youtube_channel(driver, account_id=None, browser_env_id=None):
             add_channel_log(account_id, browser_env_id, 'failed', error_msg)
             return "failed", error_msg
         
-        # 6. 在频道创建弹窗中上传头像
+        # 7. 在频道创建弹窗中上传头像
         print(f"[频道创建] 上传头像...")
         add_channel_log(account_id, browser_env_id, 'info', '开始上传头像')
         
@@ -1350,7 +1406,7 @@ def create_youtube_channel(driver, account_id=None, browser_env_id=None):
         
         time.sleep(2)
         
-        # 步骤6: 在文件选择器中输入图片路径
+        # 步骤8: 在文件选择器中输入图片路径
         print(f"[频道创建] 查找文件上传input...")
         try:
             # 使用强大的JavaScript递归查找input[type='file']，支持Shadow DOM和iframe
@@ -1500,7 +1556,7 @@ def create_youtube_channel(driver, account_id=None, browser_env_id=None):
                 else:
                     return "failed", "无法定位文件上传控件且系统交互失败"
             
-            # 步骤7: 等待裁剪界面 - 使用纯等待，不轮询DOM以避免干扰
+            # 步骤9: 等待裁剪界面 - 使用纯等待，不轮询DOM以避免干扰
             print(f"[频道创建] 等待裁剪界面加载（纯等待模式，不干扰浏览器）...")
             print(f"[频道创建] 等待15秒让裁剪界面完全加载...")
             
@@ -1513,7 +1569,7 @@ def create_youtube_channel(driver, account_id=None, browser_env_id=None):
             
             print(f"[频道创建] 等待完成，开始查找裁剪界面Done按钮...")
             
-            # 步骤8: 查找裁剪界面的Done按钮 (jsname="yTKzd")
+            # 步骤10: 查找裁剪界面的Done按钮 (jsname="yTKzd")
             done_button = None
             
             # 使用温和的方式查找，每次尝试间隔较长
@@ -1567,7 +1623,7 @@ def create_youtube_channel(driver, account_id=None, browser_env_id=None):
                 
                 time.sleep(2)
                 
-                # 步骤9: 处理确认对话框 - 点击 "Save as profile picture" 按钮
+                # 步骤11: 处理确认对话框 - 点击 "Save as profile picture" 按钮
                 print(f"[频道创建] 查找'Save as profile picture'按钮...")
                 save_button = None
                 
@@ -1645,7 +1701,7 @@ def create_youtube_channel(driver, account_id=None, browser_env_id=None):
             traceback.print_exc()
             return "failed", "头像上传失败"
         
-        # 9. 填写频道名称（Handle会自动生成）
+        # 12. 填写频道名称（Handle会自动生成）
         print(f"[频道创建] 填写频道名称...")
         try:
             # 生成随机名称
@@ -1704,7 +1760,7 @@ def create_youtube_channel(driver, account_id=None, browser_env_id=None):
             traceback.print_exc()
             return "failed", error_msg
         
-        # 10. 点击"Create channel"按钮
+        # 13. 点击"Create channel"按钮
         print(f"[频道创建] 查找并点击'Create channel'按钮...")
         add_channel_log(account_id, browser_env_id, 'info', '查找Create channel按钮')
         try:
@@ -1770,7 +1826,7 @@ def create_youtube_channel(driver, account_id=None, browser_env_id=None):
             traceback.print_exc()
             return "failed", error_msg
         
-        # 9. 检查频道是否创建成功
+        # 14. 检查频道是否创建成功
         try:
             current_url = driver.current_url
             print(f"[频道创建] 创建后URL: {current_url}")
@@ -1782,7 +1838,7 @@ def create_youtube_channel(driver, account_id=None, browser_env_id=None):
                 channel_url = current_url
                 print(f"[频道创建] 频道链接: {channel_url}")
                 
-                # 11. 保存频道信息到数据库
+                # 15. 保存频道信息到数据库
                 try:
                     from models import Account
                     account = Account.query.get(account_id)
@@ -1794,7 +1850,7 @@ def create_youtube_channel(driver, account_id=None, browser_env_id=None):
                 except Exception as db_error:
                     print(f"[频道创建警告] 保存频道信息失败: {str(db_error)}")
                 
-                # 12. 删除使用的头像
+                # 16. 删除使用的头像
                 try:
                     if avatar_path and os.path.exists(avatar_path):
                         os.remove(avatar_path)

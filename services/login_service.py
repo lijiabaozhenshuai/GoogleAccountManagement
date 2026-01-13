@@ -13,7 +13,9 @@ from selenium.webdriver.support import expected_conditions as EC
 
 from models import db, Account, LoginLog, BrowserEnv, Phone
 from services import hubstudio_service
-from config import CAPTCHA_CONFIG
+from config import CAPTCHA_CONFIG, APPEAL_TEXT_PATH
+import pandas as pd
+import os
 
 
 def add_login_log(account_id, browser_env_id, action, status, message):
@@ -57,6 +59,400 @@ def get_available_browser_env():
         print(f"获取浏览器环境失败: {e}")
     
     return None
+
+
+def get_appeal_text_from_excel():
+    """从Excel文件中随机获取一条申诉文案
+    
+    Returns:
+        str: 申诉文案，失败返回 None
+    """
+    try:
+        # 检查配置
+        if not APPEAL_TEXT_PATH:
+            print(f"[申诉] 错误: 未配置申诉文案Excel路径")
+            return None
+        
+        if not os.path.exists(APPEAL_TEXT_PATH):
+            print(f"[申诉] 错误: 申诉文案文件不存在: {APPEAL_TEXT_PATH}")
+            return None
+        
+        print(f"[申诉] 开始读取申诉文案Excel文件: {APPEAL_TEXT_PATH}")
+        
+        # 读取Excel文件
+        df = pd.read_excel(APPEAL_TEXT_PATH)
+        
+        # 检查是否有数据
+        if df.empty:
+            print(f"[申诉] 错误: Excel文件为空")
+            return None
+        
+        # 获取第二列的数据（索引为1，因为从0开始）
+        if len(df.columns) < 2:
+            print(f"[申诉] 错误: Excel文件列数不足，需要至少2列")
+            return None
+        
+        # 获取第二列的所有非空值
+        appeal_texts = df.iloc[:, 1].dropna().tolist()
+        
+        if not appeal_texts:
+            print(f"[申诉] 错误: 第二列没有可用的申诉文案")
+            return None
+        
+        # 随机选择一条
+        import random
+        appeal_text = random.choice(appeal_texts)
+        
+        print(f"[申诉] 成功获取申诉文案（共{len(appeal_texts)}条可用）")
+        print(f"[申诉] 文案内容: {appeal_text[:100]}...")  # 只显示前100个字符
+        
+        return str(appeal_text)
+        
+    except Exception as e:
+        print(f"[申诉] 读取申诉文案失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+def handle_appeal_flow(driver, backup_email):
+    """处理申诉流程
+    
+    Args:
+        driver: Selenium WebDriver
+        backup_email: 辅助邮箱
+    
+    Returns:
+        str: 处理结果 "success"/"failed"
+    """
+    try:
+        print(f"[申诉] 开始处理申诉流程...")
+        
+        # 1. 检查是否在禁用页面
+        current_url = driver.current_url
+        print(f"[申诉] 当前URL: {current_url}")
+        
+        if "speedbump/disabled/explanation" not in current_url:
+            print(f"[申诉] 错误: 不在申诉起始页面")
+            return "not_appeal_page"
+        
+        # 等待页面加载
+        time.sleep(3)
+        
+        # 2. 点击 "Start appeal" 按钮
+        try:
+            print(f"[申诉] 查找 'Start appeal' 按钮...")
+            start_appeal_button = None
+            
+            try:
+                # 方式1: 通过文本查找
+                start_appeal_button = WebDriverWait(driver, 10).until(
+                    EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Start appeal') or contains(text(), '开始申诉')]"))
+                )
+                print(f"[申诉] 通过文本找到按钮")
+            except:
+                try:
+                    # 方式2: 查找所有button，找包含appeal的
+                    buttons = driver.find_elements(By.TAG_NAME, "button")
+                    for btn in buttons:
+                        if btn.is_displayed() and 'appeal' in btn.text.lower():
+                            start_appeal_button = btn
+                            print(f"[申诉] 通过遍历找到按钮")
+                            break
+                except:
+                    pass
+            
+            if not start_appeal_button:
+                print(f"[申诉] 错误: 未找到 'Start appeal' 按钮")
+                return "start_button_not_found"
+            
+            # 滚动并点击
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", start_appeal_button)
+            time.sleep(1)
+            
+            try:
+                start_appeal_button.click()
+                print(f"[申诉] 已点击 'Start appeal' 按钮")
+            except:
+                driver.execute_script("arguments[0].click();", start_appeal_button)
+                print(f"[申诉] 已点击 'Start appeal' 按钮（JS方式）")
+            
+            time.sleep(3)
+            
+        except Exception as e:
+            error_msg = f"点击 'Start appeal' 按钮失败: {str(e)}"
+            print(f"[申诉] 错误: {error_msg}")
+            import traceback
+            traceback.print_exc()
+            return "click_start_failed"
+        
+        # 3. 在 reviewconsent 页面点击 Next
+        try:
+            current_url = driver.current_url
+            print(f"[申诉] 当前URL: {current_url}")
+            
+            if "reviewconsent" in current_url:
+                print(f"[申诉] 在 reviewconsent 页面，查找 Next 按钮...")
+                
+                next_button = WebDriverWait(driver, 10).until(
+                    EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Next') or contains(., '下一步')]"))
+                )
+                
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", next_button)
+                time.sleep(1)
+                
+                try:
+                    next_button.click()
+                    print(f"[申诉] 已点击 Next 按钮")
+                except:
+                    driver.execute_script("arguments[0].click();", next_button)
+                    print(f"[申诉] 已点击 Next 按钮（JS方式）")
+                
+                time.sleep(3)
+            
+        except Exception as e:
+            print(f"[申诉] 警告: reviewconsent 页面处理失败: {str(e)}")
+            # 继续执行，可能已经自动跳转
+        
+        # 4. 在 additionalinformation 页面填写申诉文案
+        try:
+            current_url = driver.current_url
+            print(f"[申诉] 当前URL: {current_url}")
+            
+            if "additionalinformation" not in current_url:
+                print(f"[申诉] 警告: 未到达 additionalinformation 页面，等待跳转...")
+                time.sleep(5)
+                current_url = driver.current_url
+                print(f"[申诉] 等待后URL: {current_url}")
+            
+            # 获取申诉文案
+            appeal_text = get_appeal_text_from_excel()
+            if not appeal_text:
+                print(f"[申诉] 错误: 无法获取申诉文案")
+                return "no_appeal_text"
+            
+            # 查找输入框
+            print(f"[申诉] 查找申诉文案输入框...")
+            text_input = None
+            
+            try:
+                # 尝试多种方式查找输入框
+                input_selectors = [
+                    "//textarea",
+                    "//input[@type='text']",
+                    "//textarea[@aria-label='Enter appeal reason']",
+                    "//div[@contenteditable='true']"
+                ]
+                
+                for selector in input_selectors:
+                    try:
+                        text_input = WebDriverWait(driver, 5).until(
+                            EC.presence_of_element_located((By.XPATH, selector))
+                        )
+                        if text_input and text_input.is_displayed():
+                            print(f"[申诉] 找到输入框，使用选择器: {selector}")
+                            break
+                        else:
+                            text_input = None
+                    except:
+                        continue
+                
+                if not text_input:
+                    print(f"[申诉] 错误: 未找到申诉文案输入框")
+                    return "input_not_found"
+                
+                # 滚动到输入框
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", text_input)
+                time.sleep(1)
+                
+                # 输入申诉文案
+                try:
+                    text_input.click()
+                    time.sleep(0.5)
+                    text_input.clear()
+                    text_input.send_keys(appeal_text)
+                    print(f"[申诉] 已输入申诉文案（普通方式）")
+                except:
+                    # 使用JS方式
+                    driver.execute_script(f"arguments[0].value = '{appeal_text}';", text_input)
+                    driver.execute_script("arguments[0].dispatchEvent(new Event('input', { bubbles: true }));", text_input)
+                    print(f"[申诉] 已输入申诉文案（JS方式）")
+                
+                time.sleep(2)
+                
+                # 点击 Next 按钮
+                print(f"[申诉] 查找 Next 按钮...")
+                next_button = WebDriverWait(driver, 10).until(
+                    EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Next') or contains(., '下一步')]"))
+                )
+                
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", next_button)
+                time.sleep(1)
+                
+                try:
+                    next_button.click()
+                    print(f"[申诉] 已点击 Next 按钮")
+                except:
+                    driver.execute_script("arguments[0].click();", next_button)
+                    print(f"[申诉] 已点击 Next 按钮（JS方式）")
+                
+                time.sleep(3)
+                
+            except Exception as e:
+                error_msg = f"输入申诉文案失败: {str(e)}"
+                print(f"[申诉] 错误: {error_msg}")
+                import traceback
+                traceback.print_exc()
+                return "input_appeal_failed"
+            
+        except Exception as e:
+            error_msg = f"处理 additionalinformation 页面失败: {str(e)}"
+            print(f"[申诉] 错误: {error_msg}")
+            import traceback
+            traceback.print_exc()
+            return "additional_info_failed"
+        
+        # 5. 在 contactaddress 页面填写辅助邮箱
+        try:
+            current_url = driver.current_url
+            print(f"[申诉] 当前URL: {current_url}")
+            
+            if "contactaddress" not in current_url:
+                print(f"[申诉] 警告: 未到达 contactaddress 页面，等待跳转...")
+                time.sleep(5)
+                current_url = driver.current_url
+                print(f"[申诉] 等待后URL: {current_url}")
+            
+            if not backup_email:
+                print(f"[申诉] 错误: 账号未设置辅助邮箱")
+                return "no_backup_email"
+            
+            # 查找邮箱输入框
+            print(f"[申诉] 查找联系邮箱输入框...")
+            email_input = None
+            
+            try:
+                email_input_selectors = [
+                    "//input[@type='email']",
+                    "//input[contains(@placeholder, 'email')]",
+                    "//input[contains(@aria-label, 'email')]"
+                ]
+                
+                for selector in email_input_selectors:
+                    try:
+                        email_input = WebDriverWait(driver, 5).until(
+                            EC.presence_of_element_located((By.XPATH, selector))
+                        )
+                        if email_input and email_input.is_displayed():
+                            print(f"[申诉] 找到邮箱输入框，使用选择器: {selector}")
+                            break
+                        else:
+                            email_input = None
+                    except:
+                        continue
+                
+                if not email_input:
+                    print(f"[申诉] 错误: 未找到邮箱输入框")
+                    return "email_input_not_found"
+                
+                # 滚动到输入框
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", email_input)
+                time.sleep(1)
+                
+                # 输入辅助邮箱
+                try:
+                    email_input.click()
+                    time.sleep(0.5)
+                    email_input.clear()
+                    email_input.send_keys(backup_email)
+                    print(f"[申诉] 已输入辅助邮箱: {backup_email}")
+                except:
+                    # 使用JS方式
+                    driver.execute_script(f"arguments[0].value = '{backup_email}';", email_input)
+                    driver.execute_script("arguments[0].dispatchEvent(new Event('input', { bubbles: true }));", email_input)
+                    print(f"[申诉] 已输入辅助邮箱（JS方式）: {backup_email}")
+                
+                time.sleep(2)
+                
+                # 点击 Submit appeal 按钮
+                print(f"[申诉] 查找 'Submit appeal' 按钮...")
+                submit_button = None
+                
+                try:
+                    # 方式1: 通过文本查找
+                    submit_button = WebDriverWait(driver, 10).until(
+                        EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Submit appeal') or contains(., '提交申诉')]"))
+                    )
+                    print(f"[申诉] 通过文本找到 Submit 按钮")
+                except:
+                    try:
+                        # 方式2: 查找所有button，找包含submit的
+                        buttons = driver.find_elements(By.TAG_NAME, "button")
+                        for btn in buttons:
+                            if btn.is_displayed() and ('submit' in btn.text.lower() or '提交' in btn.text):
+                                submit_button = btn
+                                print(f"[申诉] 通过遍历找到 Submit 按钮")
+                                break
+                    except:
+                        pass
+                
+                if not submit_button:
+                    print(f"[申诉] 错误: 未找到 'Submit appeal' 按钮")
+                    return "submit_button_not_found"
+                
+                # 滚动并点击
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", submit_button)
+                time.sleep(1)
+                
+                try:
+                    submit_button.click()
+                    print(f"[申诉] 已点击 'Submit appeal' 按钮")
+                except:
+                    driver.execute_script("arguments[0].click();", submit_button)
+                    print(f"[申诉] 已点击 'Submit appeal' 按钮（JS方式）")
+                
+                time.sleep(5)
+                
+                # 检查是否成功
+                current_url = driver.current_url
+                print(f"[申诉] 提交后URL: {current_url}")
+                
+                if "confirmation" in current_url or "submitted" in current_url:
+                    print(f"[申诉] ✅ 申诉提交成功！")
+                    return "success"
+                else:
+                    # 检查页面是否有成功提示
+                    try:
+                        success_element = driver.find_element(By.XPATH, "//h1[contains(text(), 'submitted') or contains(text(), '已提交')]")
+                        if success_element and success_element.is_displayed():
+                            print(f"[申诉] ✅ 检测到成功提示，申诉提交成功！")
+                            return "success"
+                    except:
+                        pass
+                    
+                    print(f"[申诉] 警告: 无法确认申诉是否提交成功")
+                    return "unknown"
+                
+            except Exception as e:
+                error_msg = f"输入辅助邮箱或提交申诉失败: {str(e)}"
+                print(f"[申诉] 错误: {error_msg}")
+                import traceback
+                traceback.print_exc()
+                return "submit_appeal_failed"
+            
+        except Exception as e:
+            error_msg = f"处理 contactaddress 页面失败: {str(e)}"
+            print(f"[申诉] 错误: {error_msg}")
+            import traceback
+            traceback.print_exc()
+            return "contact_address_failed"
+        
+    except Exception as e:
+        error_msg = f"申诉流程处理失败: {str(e)}"
+        print(f"[申诉] 错误: {error_msg}")
+        import traceback
+        traceback.print_exc()
+        return "error"
 
 
 def detect_login_page_state(driver):
@@ -214,10 +610,15 @@ def detect_login_page_state(driver):
                         return "verify_identity"
                     pass
         
-        # 检查账号被禁用
+        # 检查账号被禁用（区分是否需要申诉）
         if "disabled" in current_url:
-            print(f"[状态检测] 检测到账号被禁用")
-            return "disabled"
+            # 检查是否是申诉起始页面（explanation）
+            if "speedbump/disabled/explanation" in current_url:
+                print(f"[状态检测] 检测到账号被禁用，需要申诉")
+                return "need_appeal"
+            else:
+                print(f"[状态检测] 检测到账号被禁用")
+                return "disabled"
         
         # 检查是否是 Passkey 注册页面
         if "passkeyenrollment" in current_url or "speedbump/passkey" in current_url:
@@ -2244,11 +2645,26 @@ def perform_login(driver, account, password, account_id=None, backup_email=None)
                 else:
                     return "failed", f"手机验证（Send页面）失败: {status}"
             
+            elif current_state == "need_appeal":
+                # 处理申诉流程
+                print(f"[登录] 检测到需要申诉，开始处理申诉流程...")
+                status = handle_appeal_flow(driver, backup_email)
+                
+                if status == "success":
+                    print(f"[登录] ✅ 申诉提交成功")
+                    return "appeal_success", "申诉提交成功，请等待审核"
+                elif status == "no_backup_email":
+                    return "appeal_failed", "需要申诉但账号未设置辅助邮箱"
+                elif status == "no_appeal_text":
+                    return "appeal_failed", "无法获取申诉文案，请检查配置"
+                else:
+                    return "appeal_failed", f"申诉流程失败: {status}"
+            
             elif current_state == "need_2fa":
                 return "need_2fa", "需要2FA验证"
             
             elif current_state == "disabled":
-                return "disabled", "账号被禁用"
+                return "disabled", "账号被禁用（无法申诉）"
             
             elif current_state == "password_error":
                 return "password_error", "密码错误"
