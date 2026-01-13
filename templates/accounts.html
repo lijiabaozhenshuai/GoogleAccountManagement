@@ -109,9 +109,12 @@
     .login-status-tag.logging { background: #dbeafe; color: #2563eb; }
     .login-status-tag.success { background: #d1fae5; color: #059669; }
     .login-status-tag.password_error { background: #fee2e2; color: #dc2626; }
+    .login-status-tag.identity_verification_failed { background: #fef3c7; color: #b45309; }
     .login-status-tag.need_phone { background: #fef3c7; color: #d97706; }
     .login-status-tag.need_2fa { background: #fef3c7; color: #d97706; }
     .login-status-tag.disabled { background: #fee2e2; color: #dc2626; }
+    .login-status-tag.appealing { background: #e0e7ff; color: #4f46e5; }
+    .login-status-tag.appeal_success { background: #ddd6fe; color: #7c3aed; }
     .login-status-tag.failed { background: #fee2e2; color: #dc2626; }
     
     /* 频道状态样式 */
@@ -204,9 +207,12 @@
     .log-status.success { background: #d1fae5; color: #059669; }
     .log-status.failed { background: #fee2e2; color: #dc2626; }
     .log-status.password_error { background: #fee2e2; color: #dc2626; }
+    .log-status.identity_verification_failed { background: #fef3c7; color: #b45309; }
     .log-status.need_phone { background: #fef3c7; color: #d97706; }
     .log-status.need_2fa { background: #fef3c7; color: #d97706; }
     .log-status.disabled { background: #fee2e2; color: #dc2626; }
+    .log-status.appealing { background: #e0e7ff; color: #4f46e5; }
+    .log-status.appeal_success { background: #ddd6fe; color: #7c3aed; }
     
     .log-message {
         color: var(--text-primary);
@@ -249,10 +255,13 @@
         'logging': '登录中',
         'success': '登录成功',
         'success_with_verification': '需要安全验证',
+        'identity_verification_failed': '无法验证身份',
         'password_error': '密码错误',
         'need_phone': '需要手机号',
         'need_2fa': '需要2FA',
         'disabled': '账号禁用',
+        'appealing': '申诉中',
+        'appeal_success': '申诉已提交',
         'failed': '登录失败'
     };
     

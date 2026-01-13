@@ -468,7 +468,71 @@ def detect_login_page_state(driver):
         # 优先检查是否是身份验证失败页面
         if "signin/rejected" in current_url:
             print(f"[状态检测] 检测到身份验证失败页面 (We couldn't verify it's you)")
-            return "need_security_verification"
+            print(f"[状态检测] 尝试点击 'Try again' 链接...")
+            
+            try:
+                # 尝试多种方式查找"Try again"链接
+                try_again_clicked = False
+                
+                # 方法1: 通过aria-label属性查找a标签（最准确）
+                try:
+                    try_again_link = WebDriverWait(driver, 3).until(
+                        EC.element_to_be_clickable((By.XPATH, "//a[@aria-label='Try again']"))
+                    )
+                    try_again_link.click()
+                    print(f"[状态检测] ✅ 成功点击 'Try again' 链接 (方法1: aria-label)")
+                    try_again_clicked = True
+                except Exception as e:
+                    print(f"[状态检测] 方法1失败: {str(e)}")
+                
+                # 方法2: 通过jsname属性查找
+                if not try_again_clicked:
+                    try:
+                        try_again_link = WebDriverWait(driver, 3).until(
+                            EC.element_to_be_clickable((By.XPATH, "//a[@jsname='hSRGPd']"))
+                        )
+                        try_again_link.click()
+                        print(f"[状态检测] ✅ 成功点击 'Try again' 链接 (方法2: jsname)")
+                        try_again_clicked = True
+                    except Exception as e:
+                        print(f"[状态检测] 方法2失败: {str(e)}")
+                
+                # 方法3: 通过href包含restart的a标签
+                if not try_again_clicked:
+                    try:
+                        try_again_link = WebDriverWait(driver, 3).until(
+                            EC.element_to_be_clickable((By.XPATH, "//a[contains(@href, '/restart')]"))
+                        )
+                        try_again_link.click()
+                        print(f"[状态检测] ✅ 成功点击 'Try again' 链接 (方法3: restart href)")
+                        try_again_clicked = True
+                    except Exception as e:
+                        print(f"[状态检测] 方法3失败: {str(e)}")
+                
+                # 方法4: 通过class和data-navigation属性
+                if not try_again_clicked:
+                    try:
+                        try_again_link = WebDriverWait(driver, 3).until(
+                            EC.element_to_be_clickable((By.XPATH, "//a[@data-navigation='server' and contains(@class, 'WpHeLc')]"))
+                        )
+                        try_again_link.click()
+                        print(f"[状态检测] ✅ 成功点击 'Try again' 链接 (方法4: class+data-navigation)")
+                        try_again_clicked = True
+                    except Exception as e:
+                        print(f"[状态检测] 方法4失败: {str(e)}")
+                
+                if try_again_clicked:
+                    time.sleep(3)  # 等待页面重新加载
+                    return "need_retry"  # 返回需要重试状态
+                else:
+                    print(f"[状态检测] ⚠️ 未找到 'Try again' 链接")
+                    print(f"[状态检测] ⚠️ 这是一个无法验证身份的页面，需要使用熟悉的设备/网络")
+                    return "identity_verification_failed"  # 无法验证身份
+                    
+            except Exception as e:
+                print(f"[状态检测] 点击 'Try again' 链接失败: {str(e)}")
+            
+            return "identity_verification_failed"  # 无法验证身份
         
         # 优先通过 URL 判断（最可靠的方法）
         if "myaccount.google.com" in current_url:
@@ -631,8 +695,9 @@ def detect_login_page_state(driver):
             try:
                 couldnt_verify = driver.find_element(By.XPATH, "//h1[contains(text(), \"We couldn't verify\") or contains(text(), \"couldn't verify\")]")
                 if couldnt_verify and couldnt_verify.is_displayed():
-                    print(f"[状态检测] 检测到 'We couldn't verify it's you' 页面")
-                    return "need_security_verification"
+                    print(f"[状态检测] 检测到 'We couldn't verify it's you' 页面（通过文本内容检测）")
+                    print(f"[状态检测] ⚠️ 无法验证身份，需要使用熟悉的设备或网络")
+                    return "identity_verification_failed"
             except:
                 pass
             
@@ -1514,8 +1579,80 @@ def check_password_page_security_verification(driver):
         # 检查是否跳转到 "We couldn't verify it's you" 页面
         if "signin/rejected" in current_url:
             print(f"[登录] ⚠️ 检测到跳转到身份验证失败页面 (signin/rejected)")
-            print(f"[登录] 这表示 Google 无法验证身份，需要使用之前登录过的设备或网络")
-            return "success_with_verification", "登录成功，但需要安全验证（无法验证身份）"
+            print(f"[登录] 尝试点击 'Try again' 链接...")
+            
+            try:
+                # 尝试多种方式查找"Try again"链接
+                try_again_clicked = False
+                
+                # 方法1: 通过aria-label属性查找a标签（最准确）
+                try:
+                    try_again_link = WebDriverWait(driver, 3).until(
+                        EC.element_to_be_clickable((By.XPATH, "//a[@aria-label='Try again']"))
+                    )
+                    try_again_link.click()
+                    print(f"[登录] ✅ 成功点击 'Try again' 链接 (方法1: aria-label)")
+                    try_again_clicked = True
+                except Exception as e:
+                    print(f"[登录] 方法1失败: {str(e)}")
+                
+                # 方法2: 通过jsname属性查找
+                if not try_again_clicked:
+                    try:
+                        try_again_link = WebDriverWait(driver, 3).until(
+                            EC.element_to_be_clickable((By.XPATH, "//a[@jsname='hSRGPd']"))
+                        )
+                        try_again_link.click()
+                        print(f"[登录] ✅ 成功点击 'Try again' 链接 (方法2: jsname)")
+                        try_again_clicked = True
+                    except Exception as e:
+                        print(f"[登录] 方法2失败: {str(e)}")
+                
+                # 方法3: 通过href包含restart的a标签
+                if not try_again_clicked:
+                    try:
+                        try_again_link = WebDriverWait(driver, 3).until(
+                            EC.element_to_be_clickable((By.XPATH, "//a[contains(@href, '/restart')]"))
+                        )
+                        try_again_link.click()
+                        print(f"[登录] ✅ 成功点击 'Try again' 链接 (方法3: restart href)")
+                        try_again_clicked = True
+                    except Exception as e:
+                        print(f"[登录] 方法3失败: {str(e)}")
+                
+                # 方法4: 通过class和data-navigation属性
+                if not try_again_clicked:
+                    try:
+                        try_again_link = WebDriverWait(driver, 3).until(
+                            EC.element_to_be_clickable((By.XPATH, "//a[@data-navigation='server' and contains(@class, 'WpHeLc')]"))
+                        )
+                        try_again_link.click()
+                        print(f"[登录] ✅ 成功点击 'Try again' 链接 (方法4: class+data-navigation)")
+                        try_again_clicked = True
+                    except Exception as e:
+                        print(f"[登录] 方法4失败: {str(e)}")
+                
+                if try_again_clicked:
+                    time.sleep(5)  # 等待页面重新加载
+                    # 重新检测页面状态
+                    current_url = driver.current_url
+                    print(f"[登录] 点击后的 URL: {current_url}")
+                    
+                    # 如果仍在rejected页面，则返回需要安全验证
+                    if "signin/rejected" in current_url:
+                        print(f"[登录] ⚠️ 点击后仍在身份验证失败页面")
+                        return "identity_verification_failed", "无法验证身份，需要使用熟悉的设备或网络"
+                    else:
+                        print(f"[登录] ✅ 成功跳转，继续登录流程")
+                        # 继续检测后续流程
+                else:
+                    print(f"[登录] ⚠️ 未找到 'Try again' 链接")
+                    print(f"[登录] ⚠️ 这是一个无法验证身份的页面，需要使用熟悉的设备/网络")
+                    return "identity_verification_failed", "无法验证身份，需要使用熟悉的设备或网络"
+                    
+            except Exception as e:
+                print(f"[登录] 点击 'Try again' 链接失败: {str(e)}")
+                return "identity_verification_failed", "无法验证身份，需要使用熟悉的设备或网络"
         
         # 检查是否跳转到登录页面（需要重新验证）
         if "signin" in current_url and "myaccount" not in current_url:
@@ -1527,13 +1664,80 @@ def check_password_page_security_verification(driver):
             # 再次检查是否是 rejected 页面
             if "signin/rejected" in current_url:
                 print(f"[登录] ⚠️ 跳转后仍是身份验证失败页面")
-                return "success_with_verification", "登录成功，但需要安全验证（无法验证身份）"
+                print(f"[登录] 尝试点击 'Try again' 链接...")
+                
+                try:
+                    # 尝试多种方式查找"Try again"链接
+                    try_again_clicked = False
+                    
+                    # 方法1: 通过aria-label属性查找a标签（最准确）
+                    try:
+                        try_again_link = WebDriverWait(driver, 3).until(
+                            EC.element_to_be_clickable((By.XPATH, "//a[@aria-label='Try again']"))
+                        )
+                        try_again_link.click()
+                        print(f"[登录] ✅ 成功点击 'Try again' 链接 (方法1: aria-label)")
+                        try_again_clicked = True
+                    except Exception as e:
+                        print(f"[登录] 方法1失败: {str(e)}")
+                    
+                    # 方法2: 通过jsname属性查找
+                    if not try_again_clicked:
+                        try:
+                            try_again_link = WebDriverWait(driver, 3).until(
+                                EC.element_to_be_clickable((By.XPATH, "//a[@jsname='hSRGPd']"))
+                            )
+                            try_again_link.click()
+                            print(f"[登录] ✅ 成功点击 'Try again' 链接 (方法2: jsname)")
+                            try_again_clicked = True
+                        except Exception as e:
+                            print(f"[登录] 方法2失败: {str(e)}")
+                    
+                    # 方法3: 通过href包含restart的a标签
+                    if not try_again_clicked:
+                        try:
+                            try_again_link = WebDriverWait(driver, 3).until(
+                                EC.element_to_be_clickable((By.XPATH, "//a[contains(@href, '/restart')]"))
+                            )
+                            try_again_link.click()
+                            print(f"[登录] ✅ 成功点击 'Try again' 链接 (方法3: restart href)")
+                            try_again_clicked = True
+                        except Exception as e:
+                            print(f"[登录] 方法3失败: {str(e)}")
+                    
+                    # 方法4: 通过class和data-navigation属性
+                    if not try_again_clicked:
+                        try:
+                            try_again_link = WebDriverWait(driver, 3).until(
+                                EC.element_to_be_clickable((By.XPATH, "//a[@data-navigation='server' and contains(@class, 'WpHeLc')]"))
+                            )
+                            try_again_link.click()
+                            print(f"[登录] ✅ 成功点击 'Try again' 链接 (方法4: class+data-navigation)")
+                            try_again_clicked = True
+                        except Exception as e:
+                            print(f"[登录] 方法4失败: {str(e)}")
+                    
+                    if try_again_clicked:
+                        time.sleep(5)  # 等待页面重新加载
+                        current_url = driver.current_url
+                        print(f"[登录] 点击后的 URL: {current_url}")
+                    else:
+                        print(f"[登录] ⚠️ 未找到 'Try again' 链接")
+                        print(f"[登录] ⚠️ 这是一个无法验证身份的页面，需要使用熟悉的设备/网络")
+                        
+                except Exception as e:
+                    print(f"[登录] 点击 'Try again' 链接失败: {str(e)}")
+                
+                return "identity_verification_failed", "无法验证身份，需要使用熟悉的设备或网络"
         
         # 重新检测状态
         verification_state = detect_login_page_state(driver)
         print(f"[登录] 修改密码页面状态: {verification_state}")
         
-        if verification_state == "need_security_verification":
+        if verification_state == "identity_verification_failed":
+            print(f"[登录] ⚠️ 无法验证身份")
+            return "identity_verification_failed", "无法验证身份，需要使用熟悉的设备或网络"
+        elif verification_state == "need_security_verification":
             print(f"[登录] ⚠️ 检测到需要安全验证")
             return "success_with_verification", "登录成功，但需要安全验证"
         else:
@@ -2387,6 +2591,11 @@ def perform_login(driver, account, password, account_id=None, backup_email=None)
             if current_state == "logged_in":
                 # 登录成功后，检测安全验证
                 return check_password_page_security_verification(driver)
+            
+            elif current_state == "identity_verification_failed":
+                # 无法验证身份
+                print(f"[登录] ⚠️ 无法验证身份，需要使用熟悉的设备或网络环境")
+                return "identity_verification_failed", "无法验证身份，需要使用熟悉的设备或网络"
             
             elif current_state == "need_security_verification":
                 # 登录成功但需要安全验证

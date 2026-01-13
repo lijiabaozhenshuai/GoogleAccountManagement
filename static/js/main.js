@@ -100,6 +100,14 @@ function getSelectedIds() {
     return Array.from(checkboxes).map(cb => parseInt(cb.value));
 }
 
+function clearSelection() {
+    const checkboxes = document.querySelectorAll('.row-checkbox');
+    checkboxes.forEach(cb => cb.checked = false);
+    const selectAll = document.getElementById('select-all');
+    if (selectAll) selectAll.checked = false;
+    updateSelection();
+}
+
 // ==================== 工具函数 ====================
 
 function escapeHtml(text) {
