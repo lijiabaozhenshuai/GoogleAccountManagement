@@ -216,48 +216,99 @@ def detect_monetization_requirement(driver, channel_url, account_id=None, browse
         driver.get(monetization_url)
         time.sleep(8)  # 等待页面加载
         
-        # 方法1：精确定位 shorts-progress 区域的 threshold 元素（最准确）
-        threshold_value = None
+        # 处理"Welcome to YouTube Studio"弹窗
         try:
-            print(f"[创收检测] 尝试方法1: 定位shorts-progress中的threshold元素...")
-            # 使用XPath精确定位shorts区域的threshold
-            shorts_threshold = driver.find_element(
-                By.XPATH, 
-                "//div[contains(@class, 'shorts-progress')]//span[contains(@class, 'threshold')]"
-            )
-            threshold_value = shorts_threshold.text.strip()
-            print(f"[创收检测] ✅ 方法1成功 - Shorts threshold值: {threshold_value}")
-        except Exception as e:
-            print(f"[创收检测] 方法1失败: {str(e)}")
+            print(f"[创收检测] 检查是否有欢迎弹窗...")
+            # 查找Continue按钮
+            continue_button = None
+            try:
+                # 方式1：通过按钮文本查找
+                continue_button = driver.find_element(By.XPATH, "//button[contains(text(), 'Continue') or contains(text(), '继续')]")
+            except:
+                # 方式2：通过aria-label查找
+                try:
+                    continue_button = driver.find_element(By.XPATH, "//button[@aria-label='Continue' or @aria-label='继续']")
+                except:
+                    pass
+            
+            if continue_button and continue_button.is_displayed():
+                print(f"[创收检测] 检测到欢迎弹窗，点击Continue按钮...")
+                continue_button.click()
+                time.sleep(2)
+                print(f"[创收检测] ✅ 已点击Continue按钮")
+            else:
+                print(f"[创收检测] 未检测到欢迎弹窗，继续...")
+        except Exception as popup_err:
+            print(f"[创收检测] 处理弹窗时出错（可忽略）: {str(popup_err)}")
         
-        # 方法2：通过ID定位（备用方案）
+        # 向下滚动页面，确保创收要求区域可见
+        print(f"[创收检测] 向下滚动页面...")
+        try:
+            # 滚动到页面中部
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight / 2);")
+            time.sleep(2)
+            # 再滚动一点，确保Shorts区域可见
+            driver.execute_script("window.scrollBy(0, 300);")
+            time.sleep(1)
+            print(f"[创收检测] ✅ 页面滚动完成")
+        except Exception as scroll_err:
+            print(f"[创收检测] 滚动页面时出错: {str(scroll_err)}")
+        
+        # 获取所有threshold元素
+        threshold_value = None
+        all_thresholds = []
+        
+        try:
+            print(f"[创收检测] 开始获取所有threshold元素...")
+            all_thresholds = driver.find_elements(By.XPATH, "//span[contains(@class, 'threshold')]")
+            print(f"[创收检测] 页面上共有 {len(all_thresholds)} 个threshold元素")
+            
+            # 打印所有threshold的值（调试用）
+            for idx, th in enumerate(all_thresholds):
+                try:
+                    th_text = th.text.strip()
+                    print(f"[创收检测调试] threshold {idx+1}: {th_text}")
+                except:
+                    pass
+            
+            # 标准的YouTube创收页面有3个threshold：
+            # 1. subscribers (1,000)
+            # 2. watch hours (4,000)
+            # 3. shorts views (3M 或 10M) ← 这是我们需要的
+            if len(all_thresholds) >= 3:
+                threshold_value = all_thresholds[2].text.strip()  # 取第3个（索引2）
+                print(f"[创收检测] ✅ 成功获取第3个threshold（Shorts）值: {threshold_value}")
+            else:
+                print(f"[创收检测] ⚠️ threshold元素数量不足: {len(all_thresholds)}")
+                
+        except Exception as e:
+            print(f"[创收检测] 获取threshold元素失败: {str(e)}")
+        
+        # 备用方法1：精确定位 shorts-progress 区域的 threshold 元素
         if not threshold_value:
             try:
-                print(f"[创收检测] 尝试方法2: 通过shorts-count ID定位...")
+                print(f"[创收检测] 尝试备用方法1: 定位shorts-progress中的threshold元素...")
+                shorts_threshold = driver.find_element(
+                    By.XPATH, 
+                    "//div[contains(@class, 'shorts-progress')]//span[contains(@class, 'threshold')]"
+                )
+                threshold_value = shorts_threshold.text.strip()
+                print(f"[创收检测] ✅ 备用方法1成功 - Shorts threshold值: {threshold_value}")
+            except Exception as e:
+                print(f"[创收检测] 备用方法1失败: {str(e)}")
+        
+        # 备用方法2：通过ID定位
+        if not threshold_value:
+            try:
+                print(f"[创收检测] 尝试备用方法2: 通过shorts-count ID定位...")
                 shorts_count_elem = driver.find_element(By.ID, "shorts-count")
                 # 找到父容器，然后找threshold
                 parent_div = shorts_count_elem.find_element(By.XPATH, "./ancestor::div[contains(@class, 'shorts-progress')]")
                 shorts_threshold = parent_div.find_element(By.XPATH, ".//span[contains(@class, 'threshold')]")
                 threshold_value = shorts_threshold.text.strip()
-                print(f"[创收检测] ✅ 方法2成功 - Shorts threshold值: {threshold_value}")
+                print(f"[创收检测] ✅ 备用方法2成功 - Shorts threshold值: {threshold_value}")
             except Exception as e:
-                print(f"[创收检测] 方法2失败: {str(e)}")
-        
-        # 方法3：获取所有threshold元素，取第三个（subscribers、watch、shorts）
-        if not threshold_value:
-            try:
-                print(f"[创收检测] 尝试方法3: 获取所有threshold元素...")
-                all_thresholds = driver.find_elements(By.XPATH, "//span[contains(@class, 'threshold')]")
-                if len(all_thresholds) >= 3:
-                    # 第1个是subscribers (1,000)
-                    # 第2个是watch hours (4,000)
-                    # 第3个是shorts (3M 或 10M)
-                    threshold_value = all_thresholds[2].text.strip()
-                    print(f"[创收检测] ✅ 方法3成功 - Shorts threshold值: {threshold_value}")
-                else:
-                    print(f"[创收检测] 方法3失败: threshold元素数量不足 ({len(all_thresholds)})")
-            except Exception as e:
-                print(f"[创收检测] 方法3失败: {str(e)}")
+                print(f"[创收检测] 备用方法2失败: {str(e)}")
         
         # 判断结果
         if not threshold_value:
@@ -964,6 +1015,10 @@ def create_youtube_channel(driver, account_id=None, browser_env_id=None):
                     
         except Exception as js_error:
             print(f"[频道创建调试] JavaScript查找出错: {str(js_error)}")
+        
+        # 等待页面稳定，避免操作过快
+        print(f"[频道创建] 等待页面完全加载...")
+        time.sleep(3)
         
         # 步骤3: 点击"From computer"选项卡
         print(f"[频道创建] 查找'From computer'选项卡...")

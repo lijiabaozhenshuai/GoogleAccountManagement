@@ -370,8 +370,8 @@
                         ${isLogging ? `<button class="action-btn reset" onclick="resetLoginStatus(${item.id})" title="重置登录状态" style="color: #f59e0b;">
                             <i data-lucide="refresh-cw"></i>
                         </button>` : ''}
-                        ${(loginStatus === 'success' || loginStatus === 'success_with_verification') && channelStatus !== 'created' ? `<button class="action-btn channel" onclick="createChannel(${item.id})" title="创建频道" style="color: #ef4444;">
-                            <i data-lucide="video"></i>
+                        ${(loginStatus === 'success' || loginStatus === 'success_with_verification') ? `<button class="action-btn channel" onclick="createChannel(${item.id})" title="${channelStatus === 'created' ? '检测创收要求' : '创建频道'}" style="color: ${channelStatus === 'created' ? '#10b981' : '#ef4444'};">
+                            <i data-lucide="${channelStatus === 'created' ? 'refresh-ccw' : 'video'}"></i>
                         </button>` : ''}
                         <button class="action-btn log" onclick="viewLogs(${item.id})" title="查看日志">
                             <i data-lucide="file-text"></i>
@@ -782,31 +782,50 @@
     
     // 创建YouTube频道
     async function createChannel(id) {
-        if (!confirm('确定要为这个账号创建YouTube频道吗？\n\n注意：\n1. 账号必须已登录成功\n2. 需要配置头像文件夹路径\n3. 频道名称将随机生成\n4. 创建成功后会删除使用的头像')) return;
-        
         try {
-            // 首先检查头像可用性
-            const checkRes = await fetch('/api/channels/check-avatar-availability');
-            const checkResult = await checkRes.json();
+            // 获取账号数据，判断是否已创建频道
+            const res = await fetch(API_BASE);
+            const data = await res.json();
+            const account = data.data.find(i => i.id === id);
             
-            if (checkResult.code !== 0) {
-                showToast(checkResult.message, 'error');
+            if (!account) {
+                showToast('未找到账号', 'error');
                 return;
             }
             
-            // 开始创建频道
-            const res = await fetch(`/api/channels/${id}/create-channel`, {
+            // 判断是创建频道还是检测创收要求
+            const isChannelCreated = account.channel_status === 'created' && account.channel_url;
+            
+            if (isChannelCreated) {
+                // 已创建频道，执行检测操作
+                if (!confirm('确定要检测这个频道的创收要求吗？\n\n将自动跳转到YouTube Studio创收页面进行检测。')) return;
+            } else {
+                // 未创建频道，执行创建操作
+                if (!confirm('确定要为这个账号创建YouTube频道吗？\n\n注意：\n1. 账号必须已登录成功\n2. 需要配置头像文件夹路径\n3. 频道名称将随机生成\n4. 创建成功后会删除使用的头像')) return;
+                
+                // 只有创建频道时才检查头像可用性
+                const checkRes = await fetch('/api/channels/check-avatar-availability');
+                const checkResult = await checkRes.json();
+                
+                if (checkResult.code !== 0) {
+                    showToast(checkResult.message, 'error');
+                    return;
+                }
+            }
+            
+            // 开始创建频道或检测创收要求
+            const apiRes = await fetch(`/api/channels/${id}/create-channel`, {
                 method: 'POST'
             });
-            const result = await res.json();
+            const result = await apiRes.json();
             
             if (result.code === 0) {
                 showToast(result.message, 'success');
             } else {
-                showToast(result.message || '创建频道失败', 'error');
+                showToast(result.message || '操作失败', 'error');
             }
         } catch (error) {
-            showToast('创建频道失败', 'error');
+            showToast('操作失败', 'error');
         }
     }
 </script>

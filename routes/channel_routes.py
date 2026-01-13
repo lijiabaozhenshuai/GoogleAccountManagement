@@ -6,7 +6,7 @@ from flask import request, jsonify
 from routes import channel_bp
 from models import db, Account, LoginLog
 from services import hubstudio_service
-from services.channel_service import check_avatar_availability, create_youtube_channel
+from services.channel_service import check_avatar_availability, create_youtube_channel, detect_monetization_requirement
 from services.login_service import perform_login
 import threading
 import time
@@ -55,10 +55,12 @@ def create_channel(account_id):
         if not account.browser_env_id:
             return jsonify({'code': 1, 'message': '账号未绑定浏览器环境'}), 400
         
-        # 检查头像可用性
-        is_available, count, error_msg = check_avatar_availability()
-        if not is_available:
-            return jsonify({'code': 1, 'message': error_msg}), 400
+        # 只有在频道未创建时才检查头像可用性
+        if account.channel_status != 'created' or not account.channel_url:
+            # 检查头像可用性
+            is_available, count, error_msg = check_avatar_availability()
+            if not is_available:
+                return jsonify({'code': 1, 'message': error_msg}), 400
         
         # 启动后台任务创建频道
         def create_channel_task():
@@ -198,21 +200,56 @@ def create_channel(account_id):
                         # 继续尝试创建频道
                         pass
                     
-                    print(f"[创建频道] 开始创建YouTube频道...")
-                    
-                    # 添加日志：开始创建频道
-                    log = LoginLog(
-                        account_id=account_id,
-                        browser_env_id=browser_env_id,
-                        action='create_channel',
-                        status='info',
-                        message='开始创建YouTube频道'
-                    )
-                    db.session.add(log)
-                    db.session.commit()
-                    
-                    # 执行创建频道操作
-                    status, message = create_youtube_channel(driver, account_id=account_id, browser_env_id=browser_env_id)
+                    # 检查频道是否已存在
+                    acc_check = Account.query.get(account_id)
+                    if acc_check and acc_check.channel_status == 'created' and acc_check.channel_url:
+                        print(f"[创建频道] 检测到频道已存在，跳转到检测创收要求流程...")
+                        
+                        # 添加日志：检测到频道已存在
+                        log = LoginLog(
+                            account_id=account_id,
+                            browser_env_id=browser_env_id,
+                            action='create_channel',
+                            status='info',
+                            message='检测到频道已存在，开始检测创收要求'
+                        )
+                        db.session.add(log)
+                        db.session.commit()
+                        
+                        # 直接调用检测创收要求函数
+                        monetization_req = detect_monetization_requirement(
+                            driver, 
+                            acc_check.channel_url, 
+                            account_id=account_id, 
+                            browser_env_id=browser_env_id
+                        )
+                        
+                        # 更新数据库
+                        if monetization_req:
+                            acc_check.monetization_requirement = monetization_req
+                            db.session.commit()
+                            
+                            status = 'success'
+                            message = f'创收要求检测完成：{monetization_req}'
+                        else:
+                            status = 'warning'
+                            message = '创收要求检测失败'
+                    else:
+                        print(f"[创建频道] 开始创建YouTube频道...")
+                        
+                        # 添加日志：开始创建频道
+                        log = LoginLog(
+                            account_id=account_id,
+                            browser_env_id=browser_env_id,
+                            action='create_channel',
+                            status='info',
+                            message='开始创建YouTube频道'
+                        )
+                        db.session.add(log)
+                        db.session.commit()
+                        
+                        # 执行创建频道操作
+                        status, message = create_youtube_channel(driver, account_id=account_id, browser_env_id=browser_env_id)
                     
                     print(f"[创建频道] 创建结果 - 状态: {status}, 消息: {message}")
                     
