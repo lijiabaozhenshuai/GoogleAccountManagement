@@ -32,6 +32,18 @@
 <div class="batch-bar" id="batch-bar">
     <span class="selected-count">已选择 <span id="selected-count">0</span> 条</span>
     <div class="batch-actions">
+        <button class="btn btn-sm btn-primary" onclick="batchLogin()" style="background-color: #2563eb;">
+            <i data-lucide="log-in"></i>
+            <span>批量登录</span>
+        </button>
+        <button class="btn btn-sm btn-success" onclick="batchCreateChannel()" style="background-color: #10b981;">
+            <i data-lucide="video"></i>
+            <span>批量创建频道</span>
+        </button>
+        <button class="btn btn-sm btn-danger" onclick="stopAllTasks()" style="background-color: #dc2626;">
+            <i data-lucide="square"></i>
+            <span>一键暂停</span>
+        </button>
         <button class="btn btn-sm btn-warning" onclick="batchResetLoginStatus()" style="background-color: #f59e0b;">
             <i data-lucide="refresh-cw"></i>
             <span>重置登录状态</span>
@@ -51,6 +63,7 @@
                 <th class="checkbox-cell" style="white-space: nowrap;">
                     <input type="checkbox" class="checkbox" id="select-all" onchange="toggleSelectAll(this)">
                 </th>
+                <th style="white-space: nowrap; min-width: 60px;">序号</th>
                 <th style="white-space: nowrap; min-width: 180px;">账号</th>
                 <th style="white-space: nowrap; min-width: 150px;">密码</th>
                 <th style="white-space: nowrap; min-width: 180px;">辅助邮箱</th>
@@ -71,6 +84,28 @@
     <div class="empty-state" id="empty-state" style="display: none;">
         <i data-lucide="inbox"></i>
         <p>暂无数据</p>
+    </div>
+</div>
+
+<!-- 分页控件 -->
+<div class="pagination-container" id="pagination-container" style="display: none;">
+    <div class="pagination-info">
+        共 <span id="total-count">0</span> 条记录，第 <span id="current-page">1</span> / <span id="total-pages">1</span> 页
+    </div>
+    <div class="pagination-controls">
+        <button class="btn btn-sm btn-outline" onclick="goToPage(1)" id="first-page-btn">
+            <i data-lucide="chevrons-left"></i>
+        </button>
+        <button class="btn btn-sm btn-outline" onclick="goToPage(currentPage - 1)" id="prev-page-btn">
+            <i data-lucide="chevron-left"></i>
+        </button>
+        <span class="pagination-pages" id="page-numbers"></span>
+        <button class="btn btn-sm btn-outline" onclick="goToPage(currentPage + 1)" id="next-page-btn">
+            <i data-lucide="chevron-right"></i>
+        </button>
+        <button class="btn btn-sm btn-outline" onclick="goToPage(totalPages)" id="last-page-btn">
+            <i data-lucide="chevrons-right"></i>
+        </button>
     </div>
 </div>
 
@@ -261,6 +296,64 @@
         from { transform: rotate(0deg); }
         to { transform: rotate(360deg); }
     }
+    
+    /* 分页样式 */
+    .pagination-container {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px 20px;
+        background: #ffffff;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        margin-top: 16px;
+        box-shadow: var(--shadow-sm);
+    }
+    
+    .pagination-info {
+        color: var(--text-muted);
+        font-size: 14px;
+    }
+    
+    .pagination-info span {
+        color: var(--text-primary);
+        font-weight: 500;
+    }
+    
+    .pagination-controls {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+    
+    .pagination-pages {
+        display: flex;
+        gap: 4px;
+    }
+    
+    .pagination-page-btn {
+        min-width: 32px;
+        height: 32px;
+        padding: 4px 8px;
+        border: 1px solid var(--border-color);
+        background: #ffffff;
+        color: var(--text-primary);
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.2s;
+    }
+    
+    .pagination-page-btn:hover {
+        border-color: var(--primary-color);
+        color: var(--primary-color);
+    }
+    
+    .pagination-page-btn.active {
+        background: var(--primary-color);
+        color: white;
+        border-color: var(--primary-color);
+    }
 </style>
 
 <script>
@@ -293,6 +386,14 @@
         'failed': '创建失败'
     };
 
+    // 分页相关变量
+    let currentPage = 1;
+    let pageSize = 20;
+    let totalPages = 1;
+    let totalCount = 0;
+    // 使用window.selectedIds确保跨文件可访问
+    window.selectedIds = window.selectedIds || new Set();
+
     // 页面加载时获取数据
     document.addEventListener('DOMContentLoaded', () => {
         loadData();
@@ -303,12 +404,70 @@
     // 加载数据
     async function loadData() {
         try {
-            const res = await fetch(API_BASE);
+            const res = await fetch(`${API_BASE}?page=${currentPage}&page_size=${pageSize}`);
             const data = await res.json();
+            totalCount = data.total;
+            totalPages = data.total_pages;
             renderTable(data.data);
+            renderPagination();
         } catch (error) {
             showToast('加载数据失败', 'error');
         }
+    }
+    
+    // 渲染分页控件
+    function renderPagination() {
+        const container = document.getElementById('pagination-container');
+        const totalCountEl = document.getElementById('total-count');
+        const currentPageEl = document.getElementById('current-page');
+        const totalPagesEl = document.getElementById('total-pages');
+        const pageNumbersEl = document.getElementById('page-numbers');
+        
+        if (totalCount === 0 || totalPages <= 1) {
+            container.style.display = 'none';
+            return;
+        }
+        
+        container.style.display = 'flex';
+        totalCountEl.textContent = totalCount;
+        currentPageEl.textContent = currentPage;
+        totalPagesEl.textContent = totalPages;
+        
+        // 生成页码按钮（最多显示7个页码）
+        let pages = [];
+        if (totalPages <= 7) {
+            pages = Array.from({ length: totalPages }, (_, i) => i + 1);
+        } else {
+            if (currentPage <= 4) {
+                pages = [1, 2, 3, 4, 5, '...', totalPages];
+            } else if (currentPage >= totalPages - 3) {
+                pages = [1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+            } else {
+                pages = [1, '...', currentPage - 1, currentPage, currentPage + 1, '...', totalPages];
+            }
+        }
+        
+        pageNumbersEl.innerHTML = pages.map(page => {
+            if (page === '...') {
+                return '<span style="padding: 0 8px;">...</span>';
+            }
+            return `<button class="pagination-page-btn ${page === currentPage ? 'active' : ''}" onclick="goToPage(${page})">${page}</button>`;
+        }).join('');
+        
+        // 更新按钮状态
+        document.getElementById('first-page-btn').disabled = currentPage === 1;
+        document.getElementById('prev-page-btn').disabled = currentPage === 1;
+        document.getElementById('next-page-btn').disabled = currentPage === totalPages;
+        document.getElementById('last-page-btn').disabled = currentPage === totalPages;
+        
+        lucide.createIcons();
+    }
+    
+    // 跳转到指定页
+    function goToPage(page) {
+        if (page < 1 || page > totalPages || page === currentPage) return;
+        currentPage = page;
+        loadData();
     }
 
     // 渲染表格
@@ -323,7 +482,7 @@
         }
         
         emptyState.style.display = 'none';
-        tbody.innerHTML = items.map(item => {
+        tbody.innerHTML = items.map((item, index) => {
             const loginStatus = item.login_status || 'not_logged';
             const loginStatusText = LOGIN_STATUS_MAP[loginStatus] || '未知';
             const isLogging = loginStatus === 'logging';
@@ -332,11 +491,18 @@
             const channelStatusText = CHANNEL_STATUS_MAP[channelStatus] || '未创建';
             const channelUrl = item.channel_url || '';
             
+            // 计算序号（全局序号）
+            const rowNumber = (currentPage - 1) * pageSize + index + 1;
+            
+            // 检查是否已勾选（跨页保持）
+            const isChecked = window.selectedIds && window.selectedIds.has(item.id);
+            
             return `
             <tr data-id="${item.id}">
                 <td class="checkbox-cell">
-                    <input type="checkbox" class="checkbox row-checkbox" value="${item.id}" onchange="updateSelection()">
+                    <input type="checkbox" class="checkbox row-checkbox" value="${item.id}" onchange="updateSelection()" ${isChecked ? 'checked' : ''}>
                 </td>
+                <td>${rowNumber}</td>
                 <td>${escapeHtml(item.account)}</td>
                 <td>${escapeHtml(item.password)}</td>
                 <td>${escapeHtml(item.backup_email)}</td>
@@ -391,6 +557,9 @@
         `}).join('');
         
         lucide.createIcons();
+        
+        // 渲染完成后更新选择状态
+        updateSelection();
     }
     
     // 自动登录
@@ -819,6 +988,87 @@
             });
             const result = await apiRes.json();
             
+            if (result.code === 0) {
+                showToast(result.message, 'success');
+            } else {
+                showToast(result.message || '操作失败', 'error');
+            }
+        } catch (error) {
+            showToast('操作失败', 'error');
+        }
+    }
+    
+    // 批量登录
+    async function batchLogin() {
+        const ids = getSelectedIds();
+        if (ids.length === 0) {
+            showToast('请先选择要登录的账号', 'warning');
+            return;
+        }
+        
+        if (!confirm(`确定要批量登录选中的 ${ids.length} 个账号吗？\n\n注意：\n1. 将自动以3个并发执行\n2. 每个账号间隔1-2秒\n3. 请确保有足够的浏览器环境`)) return;
+        
+        try {
+            const res = await fetch(`${API_BASE}/batch-login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids })
+            });
+            const result = await res.json();
+            if (result.code === 0) {
+                showToast(result.message, 'success');
+                // 清空选择
+                clearSelection();
+                // 刷新数据
+                setTimeout(() => loadData(), 1000);
+            } else {
+                showToast(result.message || '操作失败', 'error');
+            }
+        } catch (error) {
+            showToast('操作失败', 'error');
+        }
+    }
+    
+    // 批量创建频道
+    async function batchCreateChannel() {
+        const ids = getSelectedIds();
+        if (ids.length === 0) {
+            showToast('请先选择要创建频道的账号', 'warning');
+            return;
+        }
+        
+        if (!confirm(`确定要批量创建频道选中的 ${ids.length} 个账号吗？\n\n注意：\n1. 账号必须已登录成功\n2. 将自动以3个并发执行\n3. 每个账号间隔1-2秒\n4. 请确保头像文件夹有足够的头像`)) return;
+        
+        try {
+            const res = await fetch(`${API_BASE}/batch-create-channel`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids })
+            });
+            const result = await res.json();
+            if (result.code === 0) {
+                showToast(result.message, 'success');
+                // 清空选择
+                clearSelection();
+                // 刷新数据
+                setTimeout(() => loadData(), 1000);
+            } else {
+                showToast(result.message || '操作失败', 'error');
+            }
+        } catch (error) {
+            showToast('操作失败', 'error');
+        }
+    }
+    
+    // 一键暂停所有任务
+    async function stopAllTasks() {
+        if (!confirm('确定要停止所有正在执行的批量任务吗？\n\n当前任务将在完成后停止。')) return;
+        
+        try {
+            const res = await fetch(`${API_BASE}/stop-all-tasks`, {
+                method: 'POST'
+            });
+            const result = await res.json();
             if (result.code === 0) {
                 showToast(result.message, 'success');
             } else {

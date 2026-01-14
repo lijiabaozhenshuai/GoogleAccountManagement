@@ -12,9 +12,27 @@ from datetime import datetime
 
 @account_bp.route('', methods=['GET'])
 def get_accounts():
-    """获取账号列表"""
-    accounts = Account.query.order_by(Account.id.desc()).all()
-    return jsonify({'code': 0, 'data': [a.to_dict() for a in accounts]})
+    """获取账号列表（支持分页）"""
+    # 获取分页参数
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('page_size', 20, type=int)
+    
+    # 查询总数
+    total = Account.query.count()
+    
+    # 分页查询
+    pagination = Account.query.order_by(Account.id.desc()).paginate(
+        page=page, per_page=page_size, error_out=False
+    )
+    
+    return jsonify({
+        'code': 0, 
+        'data': [a.to_dict() for a in pagination.items],
+        'total': total,
+        'page': page,
+        'page_size': page_size,
+        'total_pages': pagination.pages
+    })
 
 
 @account_bp.route('', methods=['POST'])
@@ -153,3 +171,73 @@ def batch_reset_login_status():
     Account.query.filter(Account.id.in_(ids)).update({'login_status': None}, synchronize_session=False)
     db.session.commit()
     return jsonify({'code': 0, 'message': f'成功重置 {len(ids)} 个账号的登录状态'})
+
+
+@account_bp.route('/batch-login', methods=['POST'])
+def batch_login():
+    """批量登录账号"""
+    import threading
+    from flask import current_app
+    from services import login_service
+    
+    ids = request.json.get('ids', [])
+    if not ids:
+        return jsonify({'code': 1, 'message': '请选择要登录的账号'})
+    
+    # 检查是否有账号正在登录中
+    logging_accounts = Account.query.filter(
+        Account.id.in_(ids),
+        Account.login_status == 'logging'
+    ).count()
+    
+    if logging_accounts > 0:
+        return jsonify({'code': 1, 'message': f'有 {logging_accounts} 个账号正在登录中，请等待完成'})
+    
+    # 在后台线程中执行批量登录任务
+    app = current_app._get_current_object()
+    thread = threading.Thread(target=login_service.batch_login_task, args=(app, ids))
+    thread.daemon = True
+    thread.start()
+    
+    return jsonify({'code': 0, 'message': f'已开始批量登录 {len(ids)} 个账号'})
+
+
+@account_bp.route('/batch-create-channel', methods=['POST'])
+def batch_create_channel():
+    """批量创建频道"""
+    import threading
+    from flask import current_app
+    from services import channel_service
+    
+    ids = request.json.get('ids', [])
+    if not ids:
+        return jsonify({'code': 1, 'message': '请选择要创建频道的账号'})
+    
+    # 检查账号是否已登录
+    not_logged_accounts = Account.query.filter(
+        Account.id.in_(ids),
+        ~Account.login_status.in_(['success', 'success_with_verification'])
+    ).count()
+    
+    if not_logged_accounts > 0:
+        return jsonify({'code': 1, 'message': f'有 {not_logged_accounts} 个账号未登录，无法创建频道'})
+    
+    # 在后台线程中执行批量创建频道任务
+    app = current_app._get_current_object()
+    thread = threading.Thread(target=channel_service.batch_create_channel_task, args=(app, ids))
+    thread.daemon = True
+    thread.start()
+    
+    return jsonify({'code': 0, 'message': f'已开始批量创建频道 {len(ids)} 个账号'})
+
+
+@account_bp.route('/stop-all-tasks', methods=['POST'])
+def stop_all_tasks():
+    """停止所有批量任务"""
+    from services import login_service, channel_service
+    
+    # 设置停止标志
+    login_service.stop_batch_tasks = True
+    channel_service.stop_batch_tasks = True
+    
+    return jsonify({'code': 0, 'message': '已发送停止信号，任务将在当前操作完成后停止'})

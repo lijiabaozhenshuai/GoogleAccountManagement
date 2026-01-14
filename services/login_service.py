@@ -3207,3 +3207,68 @@ def sync_browser_envs():
     except Exception as e:
         raise e
 
+
+# 批量任务停止标志
+stop_batch_tasks = False
+
+
+def batch_login_task(app, account_ids):
+    """批量登录任务（速率控制：最多3个并发，间隔1-2秒）"""
+    import random
+    import threading
+    from queue import Queue
+    
+    global stop_batch_tasks
+    stop_batch_tasks = False
+    
+    with app.app_context():
+        print(f"\n========== 开始批量登录 {len(account_ids)} 个账号 ==========")
+        
+        # 创建任务队列
+        task_queue = Queue()
+        for account_id in account_ids:
+            task_queue.put(account_id)
+        
+        # 工作线程函数
+        def worker():
+            # auto_login_task内部已经有app_context，这里不需要再加
+            while not task_queue.empty() and not stop_batch_tasks:
+                try:
+                    account_id = task_queue.get(timeout=1)
+                    print(f"[批量登录] 开始登录账号 ID: {account_id}")
+                    
+                    # 执行登录
+                    auto_login_task(app, account_id)
+                    
+                    # 任务完成后等待1-2秒
+                    if not task_queue.empty():
+                        wait_time = random.uniform(1, 2)
+                        print(f"[批量登录] 等待 {wait_time:.1f} 秒后继续下一个...")
+                        time.sleep(wait_time)
+                    
+                    task_queue.task_done()
+                except Exception as e:
+                    print(f"[批量登录错误] {str(e)}")
+                    import traceback
+                    traceback.print_exc()
+        
+        # 创建3个工作线程
+        threads = []
+        for i in range(3):
+            thread = threading.Thread(target=worker)
+            thread.daemon = True
+            thread.start()
+            threads.append(thread)
+            # 启动线程时也间隔一下
+            if i < 2:
+                time.sleep(0.5)
+        
+        # 等待所有任务完成
+        for thread in threads:
+            thread.join()
+        
+        if stop_batch_tasks:
+            print(f"========== 批量登录已被用户停止 ==========\n")
+        else:
+            print(f"========== 批量登录完成 ==========\n")
+

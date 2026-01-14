@@ -380,12 +380,13 @@ def create_youtube_channel(driver, account_id=None, browser_env_id=None):
             current_url = driver.current_url
             print(f"[频道创建-步骤1] 当前URL: {current_url}")
             
-            # 检查是否在Google相关页面
-            if "google.com" not in current_url and "youtube.com" not in current_url:
-                error_msg = "步骤1失败: 未检测到Google登录状态"
-                print(f"[频道创建-步骤1-错误] {error_msg}")
-                add_channel_log(account_id, browser_env_id, 'failed', error_msg)
-                return "failed", "请先登录Google账号"
+            # 如果是空白页，先导航到YouTube检查登录状态
+            if current_url == "about:blank" or ("google.com" not in current_url and "youtube.com" not in current_url):
+                print(f"[频道创建-步骤1] 当前不在Google/YouTube页面，先导航到YouTube检查登录状态...")
+                driver.get("https://www.youtube.com/")
+                time.sleep(5)
+                current_url = driver.current_url
+                print(f"[频道创建-步骤1] 导航后URL: {current_url}")
             
             print(f"[频道创建-步骤1] ✅ 浏览器状态正常")
             add_channel_log(account_id, browser_env_id, 'success', '步骤1完成: 浏览器状态检查通过')
@@ -2162,4 +2163,170 @@ def create_youtube_channel(driver, account_id=None, browser_env_id=None):
         # 如果不确定是否使用了头像，可以选择不删除
         
         return "failed", error_msg
+
+
+# 批量任务停止标志
+stop_batch_tasks = False
+
+
+def batch_create_channel_task(app, account_ids):
+    """批量创建频道任务（速率控制：最多3个并发，间隔1-2秒）"""
+    import random
+    import threading
+    from queue import Queue
+    from models import Account
+    from services import hubstudio_service
+    
+    global stop_batch_tasks
+    stop_batch_tasks = False
+    
+    with app.app_context():
+        print(f"\n========== 开始批量创建频道 {len(account_ids)} 个账号 ==========")
+        
+        # 创建任务队列
+        task_queue = Queue()
+        for account_id in account_ids:
+            task_queue.put(account_id)
+        
+        # 工作线程函数
+        def worker():
+            with app.app_context():
+                while not task_queue.empty() and not stop_batch_tasks:
+                    driver = None
+                    account_id = None
+                    browser_env_id = None
+                    
+                    try:
+                        account_id = task_queue.get(timeout=1)
+                        print(f"[批量创建频道] 开始处理账号 ID: {account_id}")
+                        
+                        # 获取账号信息
+                        account = Account.query.get(account_id)
+                        if not account:
+                            print(f"[批量创建频道错误] 账号不存在: ID {account_id}")
+                            task_queue.task_done()
+                            continue
+                        
+                        # 检查是否已登录
+                        if account.login_status not in ['success', 'success_with_verification']:
+                            add_channel_log(account_id, None, 'failed', '账号未登录，无法创建频道')
+                            print(f"[批量创建频道] 账号 {account.account} 未登录")
+                            task_queue.task_done()
+                            continue
+                        
+                        # 检查是否有绑定的浏览器环境
+                        if not account.browser_env_id:
+                            add_channel_log(account_id, None, 'failed', '账号未绑定浏览器环境')
+                            print(f"[批量创建频道] 账号 {account.account} 未绑定浏览器环境")
+                            task_queue.task_done()
+                            continue
+                        
+                        browser_env_id = account.browser_env_id
+                        
+                        # 判断是创建频道还是检测创收要求
+                        is_channel_created = account.channel_status == 'created' and account.channel_url
+                        
+                        if is_channel_created:
+                            # 已创建频道，执行检测操作
+                            print(f"[批量创建频道] 账号 {account.account} 已有频道，开始检测创收要求...")
+                            add_channel_log(account_id, browser_env_id, 'info', '开始检测创收要求')
+                            
+                            # 打开浏览器
+                            driver = hubstudio_service.open_browser(browser_env_id)
+                            if not driver:
+                                add_channel_log(account_id, browser_env_id, 'failed', '浏览器启动失败')
+                                print(f"[批量创建频道错误] 浏览器启动失败")
+                                task_queue.task_done()
+                                continue
+                            
+                            # 检测创收要求
+                            result = detect_monetization_requirement(driver, account.channel_url, account_id, browser_env_id)
+                            
+                            if result:
+                                account.monetization_requirement = result
+                                db.session.commit()
+                                add_channel_log(account_id, browser_env_id, 'success', f'检测成功，创收要求: {result}')
+                                print(f"[批量创建频道] 检测成功: {result}")
+                            else:
+                                add_channel_log(account_id, browser_env_id, 'failed', '无法检测创收要求')
+                                print(f"[批量创建频道] 检测失败")
+                        else:
+                            # 未创建频道，执行创建操作
+                            print(f"[批量创建频道] 账号 {account.account} 开始创建频道...")
+                            
+                            # 检查头像可用性 (返回元组: 是否可用, 可用数量, 错误信息)
+                            is_available, avatar_count, error_msg = check_avatar_availability()
+                            if not is_available:
+                                add_channel_log(account_id, browser_env_id, 'failed', error_msg)
+                                print(f"[批量创建频道错误] {error_msg}")
+                                task_queue.task_done()
+                                continue
+                            
+                            # 打开浏览器
+                            driver = hubstudio_service.open_browser(browser_env_id)
+                            if not driver:
+                                add_channel_log(account_id, browser_env_id, 'failed', '浏览器启动失败')
+                                print(f"[批量创建频道错误] 浏览器启动失败")
+                                task_queue.task_done()
+                                continue
+                            
+                            # 创建频道
+                            channel_status, result_msg = create_youtube_channel(driver, account_id, browser_env_id)
+                            
+                            # 更新账号状态
+                            if channel_status == "success":
+                                # 从result_msg中提取频道URL（但create_youtube_channel已经保存到数据库了，这里可能是冗余的）
+                                # 注意：create_youtube_channel函数内部已经更新了数据库，这里实际上不需要再次更新
+                                # 但为了保持一致性，我们刷新账号对象
+                                db.session.refresh(account)
+                                print(f"[批量创建频道] 频道创建成功: {account.channel_url}")
+                            else:
+                                account.channel_status = 'failed'
+                                db.session.commit()
+                                print(f"[批量创建频道] 频道创建失败: {result_msg}")
+                        
+                        # 任务完成后等待1-2秒
+                        if not task_queue.empty():
+                            wait_time = random.uniform(1, 2)
+                            print(f"[批量创建频道] 等待 {wait_time:.1f} 秒后继续下一个...")
+                            time.sleep(wait_time)
+                    
+                        task_queue.task_done()
+                    except Exception as e:
+                        print(f"[批量创建频道错误] {str(e)}")
+                        if account_id:
+                            add_channel_log(account_id, browser_env_id, 'failed', f'创建失败: {str(e)}')
+                        task_queue.task_done()
+                    finally:
+                        # 关闭浏览器
+                        if driver:
+                            try:
+                                driver.quit()
+                            except:
+                                pass
+                        if browser_env_id:
+                            try:
+                                hubstudio_service.close_browser(browser_env_id)
+                            except:
+                                pass
+        
+        # 创建3个工作线程
+        threads = []
+        for i in range(3):
+            thread = threading.Thread(target=worker)
+            thread.daemon = True
+            thread.start()
+            threads.append(thread)
+            # 启动线程时也间隔一下
+            if i < 2:
+                time.sleep(0.5)
+        
+        # 等待所有任务完成
+        for thread in threads:
+            thread.join()
+        
+        if stop_batch_tasks:
+            print(f"========== 批量创建频道已被用户停止 ==========\n")
+        else:
+            print(f"========== 批量创建频道完成 ==========\n")
 

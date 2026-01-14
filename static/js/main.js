@@ -65,11 +65,19 @@ function closeModal() {
     container.innerHTML = '';
 }
 
-// ==================== 表格选择功能 ====================
+// ==================== 表格选择功能（支持跨页保持） ====================
 
 function toggleSelectAll(checkbox) {
     const checkboxes = document.querySelectorAll('.row-checkbox');
-    checkboxes.forEach(cb => cb.checked = checkbox.checked);
+    checkboxes.forEach(cb => {
+        cb.checked = checkbox.checked;
+        const id = parseInt(cb.value);
+        if (checkbox.checked) {
+            window.selectedIds.add(id);
+        } else {
+            window.selectedIds.delete(id);
+        }
+    });
     updateSelection();
 }
 
@@ -80,22 +88,38 @@ function updateSelection() {
     const batchBar = document.getElementById('batch-bar');
     const countEl = document.getElementById('selected-count');
     
+    // 更新selectedIds Set
+    checkboxes.forEach(cb => {
+        const id = parseInt(cb.value);
+        if (cb.checked) {
+            window.selectedIds.add(id);
+        } else {
+            window.selectedIds.delete(id);
+        }
+    });
+    
     // 更新全选框状态
     if (checkboxes.length > 0) {
         selectAll.checked = checkedBoxes.length === checkboxes.length;
         selectAll.indeterminate = checkedBoxes.length > 0 && checkedBoxes.length < checkboxes.length;
     }
     
-    // 显示/隐藏批量操作栏
-    if (checkedBoxes.length > 0) {
+    // 显示/隐藏批量操作栏（显示总选中数，不只是当前页）
+    const totalSelected = window.selectedIds ? window.selectedIds.size : checkedBoxes.length;
+    if (totalSelected > 0) {
         batchBar.classList.add('show');
-        countEl.textContent = checkedBoxes.length;
+        countEl.textContent = totalSelected;
     } else {
         batchBar.classList.remove('show');
     }
 }
 
 function getSelectedIds() {
+    // 如果有跨页选择的Set，返回Set中的所有ID
+    if (window.selectedIds && window.selectedIds.size > 0) {
+        return Array.from(window.selectedIds);
+    }
+    // 否则返回当前页选中的ID
     const checkboxes = document.querySelectorAll('.row-checkbox:checked');
     return Array.from(checkboxes).map(cb => parseInt(cb.value));
 }
@@ -105,6 +129,10 @@ function clearSelection() {
     checkboxes.forEach(cb => cb.checked = false);
     const selectAll = document.getElementById('select-all');
     if (selectAll) selectAll.checked = false;
+    // 清空跨页选择
+    if (window.selectedIds) {
+        window.selectedIds.clear();
+    }
     updateSelection();
 }
 
