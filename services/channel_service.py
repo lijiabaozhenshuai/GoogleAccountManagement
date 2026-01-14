@@ -397,32 +397,84 @@ def create_youtube_channel(driver, account_id=None, browser_env_id=None):
             add_channel_log(account_id, browser_env_id, 'failed', error_msg)
             return "failed", "浏览器连接失败"
         
-        # === 步骤2: 获取可用头像 ===
-        print(f"[频道创建-步骤2] 获取可用头像...")
-        add_channel_log(account_id, browser_env_id, 'info', '步骤2: 获取可用头像')
+        # === 步骤2: 检查频道是否已经创建 ===
+        print(f"[频道创建-步骤2] 检查频道是否已经创建...")
+        add_channel_log(account_id, browser_env_id, 'info', '步骤2: 检查频道是否已存在')
+        try:
+            from models import Account
+            account = Account.query.get(account_id)
+            if account and account.channel_status == 'created' and account.channel_url:
+                print(f"[频道创建-步骤2] ⚠️ 检测到频道已存在: {account.channel_url}")
+                add_channel_log(account_id, browser_env_id, 'info', '步骤2: 检测到频道已存在，跳转到验证流程')
+                
+                # 跳转到YouTube工作室验证频道
+                print(f"[频道创建-步骤2.1] 跳转到YouTube工作室验证频道...")
+                driver.get("https://studio.youtube.com")
+                time.sleep(5)
+                
+                # 验证频道链接是否正常
+                current_url = driver.current_url
+                print(f"[频道创建-步骤2.1] 当前URL: {current_url}")
+                
+                if "studio.youtube.com" in current_url:
+                    print(f"[频道创建-步骤2.1] ✅ 频道状态正常，可以访问YouTube工作室")
+                    add_channel_log(account_id, browser_env_id, 'success', '步骤2.1完成: 频道状态正常')
+                    
+                    # 检测创收要求
+                    print(f"[频道创建-步骤2.2] 开始检测创收要求...")
+                    add_channel_log(account_id, browser_env_id, 'info', '步骤2.2: 检测创收要求')
+                    monetization_req = detect_monetization_requirement(driver, account.channel_url, account_id, browser_env_id)
+                    
+                    if monetization_req:
+                        print(f"[频道创建-步骤2.2] ✅ 创收要求检测成功: {monetization_req}")
+                        account.monetization_requirement = monetization_req
+                        db.session.commit()
+                        add_channel_log(account_id, browser_env_id, 'success', f'步骤2.2完成: 创收要求为 {monetization_req}')
+                        
+                        success_msg = f"✅ 频道已存在且状态正常！链接: {account.channel_url}, 创收要求: {monetization_req}"
+                        return "success", success_msg
+                    else:
+                        print(f"[频道创建-步骤2.2] ⚠️ 无法检测创收要求")
+                        add_channel_log(account_id, browser_env_id, 'warning', '步骤2.2: 无法检测创收要求')
+                        
+                        success_msg = f"✅ 频道已存在且状态正常！链接: {account.channel_url}, 创收要求: 未检测到"
+                        return "success", success_msg
+                else:
+                    print(f"[频道创建-步骤2.1] ⚠️ 无法访问YouTube工作室，频道可能有问题")
+                    add_channel_log(account_id, browser_env_id, 'warning', '步骤2.1: 无法访问YouTube工作室')
+                    # 继续创建新频道流程
+            
+            print(f"[频道创建-步骤2] ✅ 频道未创建，继续创建流程")
+        except Exception as e:
+            print(f"[频道创建-步骤2-警告] 检查频道状态失败: {str(e)}")
+            # 继续创建流程
+        
+        # === 步骤3: 获取可用头像 ===
+        print(f"[频道创建-步骤3] 获取可用头像...")
+        add_channel_log(account_id, browser_env_id, 'info', '步骤3: 获取可用头像')
         avatar_path = get_available_avatar()
         if not avatar_path:
-            error_msg = "步骤2失败: 没有可用的头像文件"
-            print(f"[频道创建-步骤2-错误] {error_msg}")
+            error_msg = "步骤3失败: 没有可用的头像文件"
+            print(f"[频道创建-步骤3-错误] {error_msg}")
             add_channel_log(account_id, browser_env_id, 'failed', error_msg)
             return "failed", "没有可用的头像文件，请在设置中配置头像文件夹路径"
         
-        print(f"[频道创建-步骤2] ✅ 已选择头像: {os.path.basename(avatar_path)}")
-        add_channel_log(account_id, browser_env_id, 'success', f'步骤2完成: 已选择头像 [{os.path.basename(avatar_path)}]')
+        print(f"[频道创建-步骤3] ✅ 已选择头像: {os.path.basename(avatar_path)}")
+        add_channel_log(account_id, browser_env_id, 'success', f'步骤3完成: 已选择头像 [{os.path.basename(avatar_path)}]')
         
-        # === 步骤3: 跳转到YouTube首页 ===
-        print(f"[频道创建-步骤3] 跳转到YouTube首页...")
-        add_channel_log(account_id, browser_env_id, 'info', '步骤3: 跳转到YouTube首页')
+        # === 步骤4: 跳转到YouTube首页 ===
+        print(f"[频道创建-步骤4] 跳转到YouTube首页...")
+        add_channel_log(account_id, browser_env_id, 'info', '步骤4: 跳转到YouTube首页')
         driver.get("https://www.youtube.com/")
         time.sleep(5)
         
         current_url = driver.current_url
-        print(f"[频道创建-步骤3] 当前URL: {current_url}")
+        print(f"[频道创建-步骤4] 当前URL: {current_url}")
         
-        # === 步骤3.1: 检查是否遇到 Google 登录被拒绝页面 ===
+        # === 步骤4.1: 检查是否遇到 Google 登录被拒绝页面 ===
         if "signin/rejected" in current_url or "Couldn't sign you in" in driver.page_source:
-            print(f"[频道创建-步骤3.1] ⚠️ 检测到Google登录被拒绝页面")
-            add_channel_log(account_id, browser_env_id, 'warning', '步骤3.1: 检测到登录被拒绝，尝试点击Try again')
+            print(f"[频道创建-步骤4.1] ⚠️ 检测到Google登录被拒绝页面")
+            add_channel_log(account_id, browser_env_id, 'warning', '步骤4.1: 检测到登录被拒绝，尝试点击Try again')
             
             try:
                 # 查找并点击 "Try again" 按钮
@@ -430,28 +482,28 @@ def create_youtube_channel(driver, account_id=None, browser_env_id=None):
                     EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Try again') or contains(., '重试')]"))
                 )
                 try_again_btn.click()
-                print(f"[频道创建-步骤3.1] ✅ 已点击 'Try again' 按钮")
-                add_channel_log(account_id, browser_env_id, 'success', '步骤3.1完成: 已点击Try again按钮，等待重新登录')
+                print(f"[频道创建-步骤4.1] ✅ 已点击 'Try again' 按钮")
+                add_channel_log(account_id, browser_env_id, 'success', '步骤4.1完成: 已点击Try again按钮，等待重新登录')
                 time.sleep(5)
                 
                 # 更新URL
                 current_url = driver.current_url
-                print(f"[频道创建-步骤3.1] 点击Try again后URL: {current_url}")
+                print(f"[频道创建-步骤4.1] 点击Try again后URL: {current_url}")
                 
             except Exception as e:
-                error_msg = f"步骤3.1失败: 点击Try again按钮失败: {str(e)}"
-                print(f"[频道创建-步骤3.1-错误] {error_msg}")
+                error_msg = f"步骤4.1失败: 点击Try again按钮失败: {str(e)}"
+                print(f"[频道创建-步骤4.1-错误] {error_msg}")
                 add_channel_log(account_id, browser_env_id, 'failed', error_msg)
                 return "failed", "登录被拒绝且无法点击Try again按钮"
         else:
-            print(f"[频道创建-步骤3] ✅ 成功跳转到YouTube")
-            add_channel_log(account_id, browser_env_id, 'success', '步骤3完成: 成功跳转到YouTube首页')
+            print(f"[频道创建-步骤4] ✅ 成功跳转到YouTube")
+            add_channel_log(account_id, browser_env_id, 'success', '步骤4完成: 成功跳转到YouTube首页')
         
-        # === 步骤4: 检查是否需要处理额外的验证步骤 ===
+        # === 步骤5: 检查是否需要处理额外的验证步骤 ===
         if "accounts.google.com" in current_url:
             if "uplevelingstep" in current_url or "selection" in current_url:
-                print(f"[频道创建-步骤4] 检测到Google额外验证步骤（Verify your info to continue）")
-                add_channel_log(account_id, browser_env_id, 'info', '步骤4: 检测到需要验证身份')
+                print(f"[频道创建-步骤5] 检测到Google额外验证步骤（Verify your info to continue）")
+                add_channel_log(account_id, browser_env_id, 'info', '步骤5: 检测到需要验证身份')
                 
                 # 导入手机验证相关函数
                 from services.login_service import get_available_phone, get_sms_code
@@ -824,8 +876,58 @@ def create_youtube_channel(driver, account_id=None, browser_env_id=None):
             if "upload" in current_url.lower():
                 # 已经有频道了，直接进入了上传页面
                 print(f"[频道创建-步骤8] 检测到已有频道（直接进入上传页面）")
-                add_channel_log(account_id, browser_env_id, 'info', '步骤8: 检测到账号已有频道，无需创建')
-                return "failed", "账号已有YouTube频道，无需创建"
+                add_channel_log(account_id, browser_env_id, 'info', '步骤8: 检测到账号已有频道，开始提取频道信息')
+                
+                # 从URL提取频道ID
+                import re
+                channel_id_match = re.search(r'/channel/([^/]+)', current_url)
+                if channel_id_match:
+                    channel_id = channel_id_match.group(1)
+                    channel_url = f"https://www.youtube.com/channel/{channel_id}"
+                    print(f"[频道创建-步骤8] ✅ 已提取频道ID: {channel_id}")
+                    print(f"[频道创建-步骤8] 频道链接: {channel_url}")
+                    add_channel_log(account_id, browser_env_id, 'success', f'步骤8完成: 已提取频道链接 [{channel_url}]')
+                    
+                    # 检测创收要求
+                    monetization_req = None
+                    try:
+                        print(f"[频道创建-步骤8.1] 开始检测创收要求...")
+                        add_channel_log(account_id, browser_env_id, 'info', '步骤8.1: 检测创收要求')
+                        monetization_req = detect_monetization_requirement(driver, channel_url, account_id, browser_env_id)
+                        if monetization_req:
+                            print(f"[频道创建-步骤8.1] ✅ 创收要求检测成功: {monetization_req}")
+                            add_channel_log(account_id, browser_env_id, 'success', f'步骤8.1完成: 创收要求为 {monetization_req}')
+                        else:
+                            print(f"[频道创建-步骤8.1] ⚠️ 创收要求检测失败")
+                            add_channel_log(account_id, browser_env_id, 'warning', '步骤8.1: 无法检测创收要求')
+                    except Exception as detect_error:
+                        print(f"[频道创建-步骤8.1-警告] 检测创收要求失败: {str(detect_error)}")
+                        add_channel_log(account_id, browser_env_id, 'warning', f'步骤8.1: 检测创收要求失败 - {str(detect_error)}')
+                    
+                    # 更新数据库
+                    try:
+                        from models import Account
+                        account = Account.query.get(account_id)
+                        if account:
+                            account.channel_status = 'created'
+                            account.channel_url = channel_url
+                            if monetization_req:
+                                account.monetization_requirement = monetization_req
+                            db.session.commit()
+                            print(f"[频道创建-步骤8.2] ✅ 已更新数据库（创收要求: {monetization_req or '未检测到'}）")
+                            add_channel_log(account_id, browser_env_id, 'success', f'步骤8.2完成: 已保存频道信息到数据库')
+                    except Exception as db_error:
+                        print(f"[频道创建-步骤8.2-错误] 更新数据库失败: {str(db_error)}")
+                        add_channel_log(account_id, browser_env_id, 'failed', f'步骤8.2失败: 更新数据库失败 - {str(db_error)}')
+                    
+                    success_msg = f"✅ 账号已有频道！链接: {channel_url}, 创收要求: {monetization_req or '未检测到'}"
+                    print(f"[频道创建-步骤8] {success_msg}")
+                    return "success", success_msg
+                else:
+                    error_msg = "无法从URL提取频道ID"
+                    print(f"[频道创建-步骤8-错误] {error_msg}")
+                    add_channel_log(account_id, browser_env_id, 'failed', error_msg)
+                    return "failed", f"检测到已有频道但{error_msg}"
             
             # 检查是否出现创建频道弹窗
             print(f"[频道创建-步骤8] 检查是否出现创建频道弹窗...")
