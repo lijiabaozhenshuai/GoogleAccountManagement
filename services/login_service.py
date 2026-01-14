@@ -2528,204 +2528,326 @@ def perform_login(driver, account, password, account_id=None, backup_email=None)
     max_total_time = 600  # 最大总时间10分钟，超过则认为登录失败
     
     try:
-        # 等待浏览器完全启动
-        print(f"[登录] 等待浏览器完全启动...")
+        # === 步骤1: 等待浏览器完全启动 ===
+        print(f"[登录-步骤1] 等待浏览器完全启动...")
+        if account_id:
+            add_login_log(account_id, None, 'login', 'info', '步骤1: 等待浏览器完全启动')
         time.sleep(2)
         
-        # 导航到Google账号页面
-        print(f"[登录] 正在访问 Google 账号页面...")
+        # === 步骤2: 导航到Google账号页面 ===
+        print(f"[登录-步骤2] 正在访问 Google 账号页面...")
+        if account_id:
+            add_login_log(account_id, None, 'login', 'info', '步骤2: 访问 Google 账号页面')
         try:
             current_url_before = driver.current_url
-            print(f"[登录] 导航前URL: {current_url_before}")
+            print(f"[登录-步骤2] 导航前URL: {current_url_before}")
             
             driver.get('https://accounts.google.com/')
-            print(f"[登录] 已发送导航请求，等待页面加载...")
+            print(f"[登录-步骤2] 已发送导航请求，等待页面加载...")
             
             # 等待页面加载
             time.sleep(5)
             
             current_url_after = driver.current_url
-            print(f"[登录] 导航后URL: {current_url_after}")
+            print(f"[登录-步骤2] 导航后URL: {current_url_after}")
             
             # 如果仍然是空白页，可能是代理或网络问题
             if current_url_after == "about:blank" or current_url_after == "data:,":
-                print(f"[登录警告] 页面仍然是空白，可能是网络或代理问题")
-                print(f"[登录] 再次尝试导航...")
+                print(f"[登录-步骤2-警告] 页面仍然是空白，可能是网络或代理问题")
+                print(f"[登录-步骤2] 再次尝试导航...")
+                if account_id:
+                    add_login_log(account_id, None, 'login', 'warning', '步骤2: 页面空白，重试导航')
                 driver.get('https://accounts.google.com/')
                 time.sleep(5)
                 current_url_retry = driver.current_url
-                print(f"[登录] 重试后URL: {current_url_retry}")
+                print(f"[登录-步骤2] 重试后URL: {current_url_retry}")
                 
                 if current_url_retry == "about:blank" or current_url_retry == "data:,":
-                    return "failed", "无法访问Google登录页面，请检查网络连接和代理设置"
+                    error_msg = "步骤2失败: 无法访问Google登录页面，请检查网络连接和代理设置"
+                    print(f"[登录-步骤2-错误] {error_msg}")
+                    if account_id:
+                        add_login_log(account_id, None, 'login', 'failed', error_msg)
+                    return "failed", error_msg
+            
+            if account_id:
+                add_login_log(account_id, None, 'login', 'success', '步骤2完成: 成功访问Google登录页面')
             
         except Exception as e:
-            print(f"[登录错误] 访问页面失败，浏览器可能已关闭: {str(e)}")
+            error_msg = f"步骤2失败: 访问页面失败，浏览器可能已关闭: {str(e)}"
+            print(f"[登录-步骤2-错误] {error_msg}")
             import traceback
             traceback.print_exc()
-            return "failed", "浏览器连接失败，可能已被关闭"
+            if account_id:
+                add_login_log(account_id, None, 'login', 'failed', error_msg)
+            return "failed", error_msg
         
-        # 循环处理登录流程（最多8次状态转换，增加重试机会）
+        # === 步骤3: 循环处理登录流程（状态机模式） ===
+        print(f"[登录-步骤3] 开始登录状态机流程...")
+        if account_id:
+            add_login_log(account_id, None, 'login', 'info', '步骤3: 开始登录状态机流程')
+        
         max_attempts = 8
         for attempt in range(max_attempts):
             # 检查是否超时
             elapsed_time = time_module.time() - start_time
             if elapsed_time > max_total_time:
-                print(f"[登录超时] 登录流程超过 {max_total_time} 秒")
-                return "failed", f"登录超时（超过{max_total_time}秒）"
-            print(f"\n[登录] ===== 第 {attempt + 1} 次状态检测 =====")
+                error_msg = f"步骤3失败: 登录流程超过 {max_total_time} 秒"
+                print(f"[登录-步骤3-超时] {error_msg}")
+                if account_id:
+                    add_login_log(account_id, None, 'login', 'failed', error_msg)
+                return "failed", error_msg
+            
+            print(f"\n[登录-步骤3.{attempt + 1}] ===== 第 {attempt + 1} 次状态检测 =====")
+            if account_id:
+                add_login_log(account_id, None, 'login', 'info', f'步骤3.{attempt + 1}: 进行第{attempt + 1}次状态检测')
+            
             try:
                 # 先输出当前URL
                 try:
                     current_url = driver.current_url
-                    print(f"[登录] 当前 URL: {current_url}")
+                    print(f"[登录-步骤3.{attempt + 1}] 当前 URL: {current_url}")
                 except:
                     pass
                 
                 current_state = detect_login_page_state(driver)
-                print(f"[登录] 检测到状态: {current_state}")
+                print(f"[登录-步骤3.{attempt + 1}] 检测到状态: {current_state}")
+                if account_id:
+                    add_login_log(account_id, None, 'login', 'info', f'步骤3.{attempt + 1}: 检测到状态 [{current_state}]')
             except Exception as e:
-                print(f"[登录错误] 检测页面状态失败，浏览器可能已关闭: {str(e)}")
-                return "failed", "浏览器连接失败，可能已被关闭"
+                error_msg = f"步骤3.{attempt + 1}失败: 检测页面状态失败，浏览器可能已关闭: {str(e)}"
+                print(f"[登录-步骤3.{attempt + 1}-错误] {error_msg}")
+                if account_id:
+                    add_login_log(account_id, None, 'login', 'failed', error_msg)
+                return "failed", error_msg
             
             if current_state == "logged_in":
                 # 登录成功后，检测安全验证
+                print(f"[登录-步骤3.{attempt + 1}] ✅ 检测到已登录状态")
+                if account_id:
+                    add_login_log(account_id, None, 'login', 'success', f'步骤3.{attempt + 1}: 检测到已登录状态，验证安全检查')
                 return check_password_page_security_verification(driver)
             
             elif current_state == "identity_verification_failed":
                 # 无法验证身份
-                print(f"[登录] ⚠️ 无法验证身份，需要使用熟悉的设备或网络环境")
+                error_msg = f"步骤3.{attempt + 1}失败: 无法验证身份，需要使用熟悉的设备或网络环境"
+                print(f"[登录-步骤3.{attempt + 1}] ⚠️ {error_msg}")
+                if account_id:
+                    add_login_log(account_id, None, 'login', 'failed', error_msg)
                 return "identity_verification_failed", "无法验证身份，需要使用熟悉的设备或网络"
             
             elif current_state == "need_security_verification":
                 # 登录成功但需要安全验证
-                print(f"[登录] ⚠️ 登录成功，但需要安全验证（可能需要原设备或其他验证方式）")
+                msg = f"步骤3.{attempt + 1}: 登录成功，但需要安全验证（可能需要原设备或其他验证方式）"
+                print(f"[登录-步骤3.{attempt + 1}] ⚠️ {msg}")
+                if account_id:
+                    add_login_log(account_id, None, 'login', 'success', msg)
                 return "success_with_verification", "登录成功，但需要安全验证"
             
             elif current_state == "choose_account":
                 # 处理选择账号页面
-                print(f"[登录] 开始处理选择账号页面...")
+                print(f"[登录-步骤3.{attempt + 1}] 开始处理选择账号页面...")
+                if account_id:
+                    add_login_log(account_id, None, 'login', 'info', f'步骤3.{attempt + 1}: 处理选择账号页面')
                 status = handle_choose_account_page(driver, account)
                 
                 if status == "success":
                     # 选择账号成功后，检测安全验证
+                    print(f"[登录-步骤3.{attempt + 1}] ✅ 选择账号成功")
+                    if account_id:
+                        add_login_log(account_id, None, 'login', 'success', f'步骤3.{attempt + 1}: 选择账号成功')
                     return check_password_page_security_verification(driver)
                 elif status == "continue":
                     # 继续下一轮检测
-                    print(f"[登录] 选择账号完成，继续检测后续状态...")
+                    print(f"[登录-步骤3.{attempt + 1}] 选择账号完成，继续检测后续状态...")
+                    if account_id:
+                        add_login_log(account_id, None, 'login', 'info', f'步骤3.{attempt + 1}: 选择账号完成，继续')
                     time.sleep(2)
                     continue
                 elif status == "account_not_found":
                     # 如果找不到账号，继续流程（可能会到输入邮箱页面）
-                    print(f"[登录] 未找到对应账号，继续正常登录流程...")
+                    print(f"[登录-步骤3.{attempt + 1}] 未找到对应账号，继续正常登录流程...")
+                    if account_id:
+                        add_login_log(account_id, None, 'login', 'info', f'步骤3.{attempt + 1}: 未找到对应账号，继续')
                     time.sleep(2)
                     continue
                 else:
-                    return "failed", f"选择账号失败: {status}"
+                    error_msg = f"步骤3.{attempt + 1}失败: 选择账号失败: {status}"
+                    print(f"[登录-步骤3.{attempt + 1}-错误] {error_msg}")
+                    if account_id:
+                        add_login_log(account_id, None, 'login', 'failed', error_msg)
+                    return "failed", error_msg
             
             elif current_state == "need_email":
                 # 处理邮箱输入页面
+                print(f"[登录-步骤3.{attempt + 1}] 开始处理邮箱输入...")
+                if account_id:
+                    add_login_log(account_id, None, 'login', 'info', f'步骤3.{attempt + 1}: 处理邮箱输入页面')
                 try:
                     # 双重检查：确保不是"Verify it's you"页面
                     try:
                         verify_title = driver.find_element(By.XPATH, "//h1[contains(text(), \"Verify it's you\") or contains(text(), '验证您的身份')]")
                         if verify_title and verify_title.is_displayed():
-                            print(f"[登录警告] 误检测为need_email，实际是Verify it's you页面，重新检测...")
+                            print(f"[登录-步骤3.{attempt + 1}-警告] 误检测为need_email，实际是Verify it's you页面，重新检测...")
+                            if account_id:
+                                add_login_log(account_id, None, 'login', 'warning', f'步骤3.{attempt + 1}: 页面误检测，重新检测')
                             time.sleep(2)
                             continue
                     except:
                         pass
                     
-                    print(f"[登录] 开始输入邮箱: {account}")
+                    print(f"[登录-步骤3.{attempt + 1}] 输入邮箱: {account}")
                     email_input = WebDriverWait(driver, 10).until(
                         EC.presence_of_element_located((By.ID, "identifierId"))
                     )
                     
                     # 检查输入框是否可编辑
                     if email_input.get_attribute("readonly") or email_input.get_attribute("disabled"):
-                        print(f"[登录警告] 邮箱输入框不可编辑，重新检测状态...")
+                        print(f"[登录-步骤3.{attempt + 1}-警告] 邮箱输入框不可编辑，重新检测状态...")
+                        if account_id:
+                            add_login_log(account_id, None, 'login', 'warning', f'步骤3.{attempt + 1}: 邮箱输入框不可编辑')
                         time.sleep(2)
                         continue
                     
                     email_input.clear()
                     email_input.send_keys(account)
+                    print(f"[登录-步骤3.{attempt + 1}] 已输入邮箱")
+                    if account_id:
+                        add_login_log(account_id, None, 'login', 'info', f'步骤3.{attempt + 1}: 已输入邮箱')
                     
                     # 点击下一步
-                    print(f"[登录] 点击邮箱下一步按钮")
+                    print(f"[登录-步骤3.{attempt + 1}] 点击邮箱下一步按钮")
                     next_button = WebDriverWait(driver, 10).until(
                         EC.element_to_be_clickable((By.ID, "identifierNext"))
                     )
                     next_button.click()
+                    if account_id:
+                        add_login_log(account_id, None, 'login', 'info', f'步骤3.{attempt + 1}: 已点击下一步，等待页面跳转')
                     
                     # 等待页面跳转
-                    print(f"[登录] 等待页面跳转...")
+                    print(f"[登录-步骤3.{attempt + 1}] 等待页面跳转...")
                     time.sleep(5)
                     
                     # 继续下一次循环检测
                     continue
                     
                 except Exception as e:
-                    error_msg = f"输入邮箱失败: {str(e)}"
-                    print(f"[登录错误] {error_msg}")
+                    error_msg = f"步骤3.{attempt + 1}警告: 输入邮箱失败: {str(e)}"
+                    print(f"[登录-步骤3.{attempt + 1}-错误] {error_msg}")
+                    if account_id:
+                        add_login_log(account_id, None, 'login', 'warning', error_msg)
                     # 如果输入失败，尝试重新检测状态而不是直接返回失败
-                    print(f"[登录] 尝试重新检测页面状态...")
+                    print(f"[登录-步骤3.{attempt + 1}] 尝试重新检测页面状态...")
                     time.sleep(2)
                     continue
             
             elif current_state == "need_password":
                 # 处理密码页面
+                print(f"[登录-步骤3.{attempt + 1}] 开始处理密码输入...")
+                if account_id:
+                    add_login_log(account_id, None, 'login', 'info', f'步骤3.{attempt + 1}: 处理密码输入页面')
                 status = handle_password_page(driver, password)
                 
                 if status == "success":
+                    print(f"[登录-步骤3.{attempt + 1}] ✅ 密码输入成功")
+                    if account_id:
+                        add_login_log(account_id, None, 'login', 'success', f'步骤3.{attempt + 1}: 密码输入成功')
                     return check_password_page_security_verification(driver)
                 elif status == "need_phone":
                     # 不直接返回，而是继续循环让下一轮处理手机验证
-                    print(f"[登录] 密码处理后需要手机验证，继续下一轮循环处理...")
+                    print(f"[登录-步骤3.{attempt + 1}] 密码处理后需要手机验证，继续下一轮循环处理...")
+                    if account_id:
+                        add_login_log(account_id, None, 'login', 'info', f'步骤3.{attempt + 1}: 需要手机验证，继续')
                     time.sleep(2)
                     continue
                 elif status == "need_2fa":
+                    msg = f"步骤3.{attempt + 1}: 需要2FA验证"
+                    print(f"[登录-步骤3.{attempt + 1}] {msg}")
+                    if account_id:
+                        add_login_log(account_id, None, 'login', 'info', msg)
                     return "need_2fa", "需要2FA验证"
                 elif status == "disabled":
+                    error_msg = f"步骤3.{attempt + 1}失败: 账号被禁用"
+                    print(f"[登录-步骤3.{attempt + 1}] {error_msg}")
+                    if account_id:
+                        add_login_log(account_id, None, 'login', 'failed', error_msg)
                     return "disabled", "账号被禁用"
                 elif status == "password_error":
+                    error_msg = f"步骤3.{attempt + 1}失败: 密码错误"
+                    print(f"[登录-步骤3.{attempt + 1}] {error_msg}")
+                    if account_id:
+                        add_login_log(account_id, None, 'login', 'failed', error_msg)
                     return "password_error", "密码错误"
                 elif status == "error":
+                    error_msg = f"步骤3.{attempt + 1}失败: 密码处理错误"
+                    print(f"[登录-步骤3.{attempt + 1}] {error_msg}")
+                    if account_id:
+                        add_login_log(account_id, None, 'login', 'failed', error_msg)
                     return "failed", "密码处理错误"
                 else:
                     # 未知状态，继续循环检测
-                    print(f"[登录] 密码处理后返回未知状态，继续检测...")
+                    print(f"[登录-步骤3.{attempt + 1}] 密码处理后返回未知状态: {status}，继续检测...")
+                    if account_id:
+                        add_login_log(account_id, None, 'login', 'warning', f'步骤3.{attempt + 1}: 密码处理返回未知状态 [{status}]')
                     time.sleep(2)
                     continue
             
             elif current_state == "verify_identity":
                 # 处理 "Verify it's you" 验证身份页面
+                print(f"[登录-步骤3.{attempt + 1}] 开始处理验证身份页面...")
+                if account_id:
+                    add_login_log(account_id, None, 'login', 'info', f'步骤3.{attempt + 1}: 处理验证身份页面')
                 status = handle_verify_identity_page(driver, backup_email)
                 
                 if status == "success":
+                    print(f"[登录-步骤3.{attempt + 1}] ✅ 验证身份成功")
+                    if account_id:
+                        add_login_log(account_id, None, 'login', 'success', f'步骤3.{attempt + 1}: 验证身份成功')
                     return check_password_page_security_verification(driver)
                 elif status == "continue":
                     # 继续下一轮检测
-                    print(f"[登录] 验证身份完成，继续检测后续状态...")
+                    print(f"[登录-步骤3.{attempt + 1}] 验证身份完成，继续检测后续状态...")
+                    if account_id:
+                        add_login_log(account_id, None, 'login', 'info', f'步骤3.{attempt + 1}: 验证身份完成，继续')
                     time.sleep(2)
                     continue
                 elif status == "no_backup_email":
+                    error_msg = f"步骤3.{attempt + 1}失败: 需要辅助邮箱验证，但账号未设置辅助邮箱"
+                    print(f"[登录-步骤3.{attempt + 1}] {error_msg}")
+                    if account_id:
+                        add_login_log(account_id, None, 'login', 'failed', error_msg)
                     return "failed", "需要辅助邮箱验证，但账号未设置辅助邮箱"
                 else:
-                    return "failed", f"验证身份失败: {status}"
+                    error_msg = f"步骤3.{attempt + 1}失败: 验证身份失败: {status}"
+                    print(f"[登录-步骤3.{attempt + 1}] {error_msg}")
+                    if account_id:
+                        add_login_log(account_id, None, 'login', 'failed', error_msg)
+                    return "failed", error_msg
             
             elif current_state == "passkey_enrollment":
                 # 处理 Passkey 注册页面
+                print(f"[登录-步骤3.{attempt + 1}] 开始处理Passkey注册页面...")
+                if account_id:
+                    add_login_log(account_id, None, 'login', 'info', f'步骤3.{attempt + 1}: 处理Passkey注册页面')
                 status = handle_passkey_enrollment_page(driver)
                 
                 if status == "success":
+                    print(f"[登录-步骤3.{attempt + 1}] ✅ Passkey处理成功")
+                    if account_id:
+                        add_login_log(account_id, None, 'login', 'success', f'步骤3.{attempt + 1}: Passkey处理成功')
                     return check_password_page_security_verification(driver)
                 elif status == "continue":
                     # 继续下一轮检测
-                    print(f"[登录] Passkey 跳过完成，继续检测后续状态...")
+                    print(f"[登录-步骤3.{attempt + 1}] Passkey 跳过完成，继续检测后续状态...")
+                    if account_id:
+                        add_login_log(account_id, None, 'login', 'info', f'步骤3.{attempt + 1}: Passkey跳过，继续')
                     time.sleep(2)
                     continue
                 else:
-                    return "failed", f"Passkey 页面处理失败: {status}"
+                    error_msg = f"步骤3.{attempt + 1}失败: Passkey 页面处理失败: {status}"
+                    print(f"[登录-步骤3.{attempt + 1}] {error_msg}")
+                    if account_id:
+                        add_login_log(account_id, None, 'login', 'failed', error_msg)
+                    return "failed", error_msg
             
             elif current_state == "verify_click_next":
                 # 处理需要点击Next的 "Verify it's you" 页面
@@ -2812,24 +2934,47 @@ def perform_login(driver, account, password, account_id=None, backup_email=None)
             
             elif current_state == "need_phone":
                 # 处理手机号验证
-                print(f"[登录] 开始处理手机号验证...")
+                print(f"[登录-步骤3.{attempt + 1}] 开始处理手机号验证...")
+                if account_id:
+                    add_login_log(account_id, None, 'login', 'info', f'步骤3.{attempt + 1}: 处理手机号验证')
                 status = handle_phone_verification(driver, account_id)
                 
                 if status == "success":
+                    print(f"[登录-步骤3.{attempt + 1}] ✅ 手机号验证成功")
+                    if account_id:
+                        add_login_log(account_id, None, 'login', 'success', f'步骤3.{attempt + 1}: 手机号验证成功')
                     return check_password_page_security_verification(driver)
                 elif status == "continue":
                     # 继续下一轮检测
-                    print(f"[登录] 手机号验证完成，继续检测后续状态...")
+                    print(f"[登录-步骤3.{attempt + 1}] 手机号验证完成，继续检测后续状态...")
+                    if account_id:
+                        add_login_log(account_id, None, 'login', 'info', f'步骤3.{attempt + 1}: 手机号验证完成，继续')
                     time.sleep(2)
                     continue
                 elif status == "no_phone":
+                    error_msg = f"步骤3.{attempt + 1}失败: 需要手机号验证，但没有可用的手机号"
+                    print(f"[登录-步骤3.{attempt + 1}] {error_msg}")
+                    if account_id:
+                        add_login_log(account_id, None, 'login', 'failed', error_msg)
                     return "failed", "需要手机号验证，但没有可用的手机号"
                 elif status == "no_sms_url":
+                    error_msg = f"步骤3.{attempt + 1}失败: 手机号没有配置接码URL"
+                    print(f"[登录-步骤3.{attempt + 1}] {error_msg}")
+                    if account_id:
+                        add_login_log(account_id, None, 'login', 'failed', error_msg)
                     return "failed", "手机号没有配置接码URL"
                 elif status == "sms_code_failed":
+                    error_msg = f"步骤3.{attempt + 1}失败: 获取验证码失败（超过12次重试）"
+                    print(f"[登录-步骤3.{attempt + 1}] {error_msg}")
+                    if account_id:
+                        add_login_log(account_id, None, 'login', 'failed', error_msg)
                     return "failed", "获取验证码失败（超过12次重试）"
                 else:
-                    return "failed", f"手机号验证失败: {status}"
+                    error_msg = f"步骤3.{attempt + 1}失败: 手机号验证失败: {status}"
+                    print(f"[登录-步骤3.{attempt + 1}] {error_msg}")
+                    if account_id:
+                        add_login_log(account_id, None, 'login', 'failed', error_msg)
+                    return "failed", error_msg
             
             elif current_state == "need_phone_consent":
                 # 处理需要点击Send发送验证码的手机验证页面（ipp/consent）
@@ -2856,43 +3001,79 @@ def perform_login(driver, account, password, account_id=None, backup_email=None)
             
             elif current_state == "need_appeal":
                 # 处理申诉流程
-                print(f"[登录] 检测到需要申诉，开始处理申诉流程...")
+                print(f"[登录-步骤3.{attempt + 1}] 检测到需要申诉，开始处理申诉流程...")
+                if account_id:
+                    add_login_log(account_id, None, 'login', 'info', f'步骤3.{attempt + 1}: 检测到需要申诉，开始处理')
                 status = handle_appeal_flow(driver, backup_email)
                 
                 if status == "success":
-                    print(f"[登录] ✅ 申诉提交成功")
+                    print(f"[登录-步骤3.{attempt + 1}] ✅ 申诉提交成功")
+                    if account_id:
+                        add_login_log(account_id, None, 'login', 'success', f'步骤3.{attempt + 1}: 申诉提交成功')
                     return "appeal_success", "申诉提交成功，请等待审核"
                 elif status == "no_backup_email":
+                    error_msg = f"步骤3.{attempt + 1}失败: 需要申诉但账号未设置辅助邮箱"
+                    print(f"[登录-步骤3.{attempt + 1}] {error_msg}")
+                    if account_id:
+                        add_login_log(account_id, None, 'login', 'failed', error_msg)
                     return "appeal_failed", "需要申诉但账号未设置辅助邮箱"
                 elif status == "no_appeal_text":
+                    error_msg = f"步骤3.{attempt + 1}失败: 无法获取申诉文案，请检查配置"
+                    print(f"[登录-步骤3.{attempt + 1}] {error_msg}")
+                    if account_id:
+                        add_login_log(account_id, None, 'login', 'failed', error_msg)
                     return "appeal_failed", "无法获取申诉文案，请检查配置"
                 else:
-                    return "appeal_failed", f"申诉流程失败: {status}"
+                    error_msg = f"步骤3.{attempt + 1}失败: 申诉流程失败: {status}"
+                    print(f"[登录-步骤3.{attempt + 1}] {error_msg}")
+                    if account_id:
+                        add_login_log(account_id, None, 'login', 'failed', error_msg)
+                    return "appeal_failed", error_msg
             
             elif current_state == "need_2fa":
+                msg = f"步骤3.{attempt + 1}: 需要2FA验证"
+                print(f"[登录-步骤3.{attempt + 1}] {msg}")
+                if account_id:
+                    add_login_log(account_id, None, 'login', 'info', msg)
                 return "need_2fa", "需要2FA验证"
             
             elif current_state == "disabled":
+                error_msg = f"步骤3.{attempt + 1}失败: 账号被禁用（无法申诉）"
+                print(f"[登录-步骤3.{attempt + 1}] {error_msg}")
+                if account_id:
+                    add_login_log(account_id, None, 'login', 'failed', error_msg)
                 return "disabled", "账号被禁用（无法申诉）"
             
             elif current_state == "password_error":
+                error_msg = f"步骤3.{attempt + 1}失败: 密码错误"
+                print(f"[登录-步骤3.{attempt + 1}] {error_msg}")
+                if account_id:
+                    add_login_log(account_id, None, 'login', 'failed', error_msg)
                 return "password_error", "密码错误"
             
             else:
                 # 未知状态，等待后继续
-                print(f"[登录] 未知状态，等待后重新检测...")
+                print(f"[登录-步骤3.{attempt + 1}] 未知状态: {current_state}，等待后重新检测...")
+                if account_id:
+                    add_login_log(account_id, None, 'login', 'warning', f'步骤3.{attempt + 1}: 未知状态 [{current_state}]，继续检测')
                 time.sleep(3)
                 continue
         
         # 超过最大尝试次数
         final_url = driver.current_url
+        error_msg = f"步骤3失败: 登录流程超过最大尝试次数({max_attempts}次)，最终 URL: {final_url}"
+        print(f"[登录-步骤3-错误] {error_msg}")
+        if account_id:
+            add_login_log(account_id, None, 'login', 'failed', error_msg)
         return "failed", f"登录流程超过最大尝试次数，最终 URL: {final_url}"
         
     except Exception as e:
-        error_msg = f"登录过程发生错误: {str(e)}"
-        print(f"[登录异常] {error_msg}")
+        error_msg = f"登录过程发生未预期的异常: {str(e)}"
+        print(f"[登录-异常] {error_msg}")
         import traceback
         traceback.print_exc()
+        if account_id:
+            add_login_log(account_id, None, 'login', 'failed', f'登录异常: {str(e)}')
         return "failed", error_msg
 
 
