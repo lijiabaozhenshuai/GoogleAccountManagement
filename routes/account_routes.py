@@ -12,16 +12,101 @@ from datetime import datetime
 
 @account_bp.route('', methods=['GET'])
 def get_accounts():
-    """获取账号列表（支持分页）"""
+    """获取账号列表（支持分页和筛选）"""
     # 获取分页参数
     page = request.args.get('page', 1, type=int)
     page_size = request.args.get('page_size', 20, type=int)
     
+    # 获取筛选参数
+    account_search = request.args.get('account', '').strip()
+    phone_search = request.args.get('phone', '').strip()
+    env_id_search = request.args.get('env_id', '').strip()
+    login_status_filter = request.args.getlist('login_status')  # 多选
+    channel_status_filter = request.args.getlist('channel_status')  # 多选
+    monetization_filter = request.args.getlist('monetization')  # 多选
+    
+    # 构建查询
+    query = Account.query
+    
+    # 账号搜索
+    if account_search:
+        query = query.filter(Account.account.like(f'%{account_search}%'))
+    
+    # 手机号搜索（需要处理 None 值）
+    if phone_search:
+        query = query.filter(
+            db.and_(
+                Account.phone_number.isnot(None),
+                Account.phone_number.like(f'%{phone_search}%')
+            )
+        )
+    
+    # 环境ID搜索（需要处理 None 值）
+    if env_id_search:
+        query = query.filter(
+            db.and_(
+                Account.browser_env_id.isnot(None),
+                Account.browser_env_id.like(f'%{env_id_search}%')
+            )
+        )
+    
+    # 登录状态筛选（多选）
+    if login_status_filter:
+        # 处理 not_logged 包括 None 的情况
+        if 'not_logged' in login_status_filter:
+            # 将 not_logged 和 None 都包含进来
+            other_statuses = [s for s in login_status_filter if s != 'not_logged']
+            if other_statuses:
+                query = query.filter(
+                    db.or_(
+                        Account.login_status.in_(other_statuses),
+                        Account.login_status == 'not_logged',
+                        Account.login_status.is_(None)
+                    )
+                )
+            else:
+                query = query.filter(
+                    db.or_(
+                        Account.login_status == 'not_logged',
+                        Account.login_status.is_(None)
+                    )
+                )
+        else:
+            query = query.filter(Account.login_status.in_(login_status_filter))
+    
+    # 频道状态筛选（多选）
+    if channel_status_filter:
+        # 处理 not_created 包括 None 的情况
+        if 'not_created' in channel_status_filter:
+            # 将 not_created 和 None 都包含进来
+            other_statuses = [s for s in channel_status_filter if s != 'not_created']
+            if other_statuses:
+                query = query.filter(
+                    db.or_(
+                        Account.channel_status.in_(other_statuses),
+                        Account.channel_status == 'not_created',
+                        Account.channel_status.is_(None)
+                    )
+                )
+            else:
+                query = query.filter(
+                    db.or_(
+                        Account.channel_status == 'not_created',
+                        Account.channel_status.is_(None)
+                    )
+                )
+        else:
+            query = query.filter(Account.channel_status.in_(channel_status_filter))
+    
+    # 创收要求筛选（多选）
+    if monetization_filter:
+        query = query.filter(Account.monetization_requirement.in_(monetization_filter))
+    
     # 查询总数
-    total = Account.query.count()
+    total = query.count()
     
     # 分页查询
-    pagination = Account.query.order_by(Account.id.desc()).paginate(
+    pagination = query.order_by(Account.id.desc()).paginate(
         page=page, per_page=page_size, error_out=False
     )
     

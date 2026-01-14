@@ -750,12 +750,23 @@ body {
     white-space: nowrap;
     color: var(--text-secondary);
     font-size: 13px;
+    font-weight: 500;
 }
 
 .search-item .form-input,
 .search-item .form-select-sm {
     width: 160px;
-    padding: 6px 12px;
+    padding: 8px 12px;
+    font-size: 14px;
+}
+
+.search-item .multi-select-display {
+    width: 160px;
+}
+
+.search-item .btn {
+    margin-top: 22px;
+    height: 36px;
 }
 
 .batch-bar.show {
