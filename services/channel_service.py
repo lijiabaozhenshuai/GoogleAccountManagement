@@ -219,6 +219,27 @@ def detect_monetization_requirement(driver, channel_url, account_id=None, browse
         # 处理"Welcome to YouTube Studio"弹窗
         try:
             print(f"[创收检测] 检查是否有欢迎弹窗...")
+            
+            # 先检查并点击"Got it"按钮（可能在Continue按钮上方）
+            try:
+                got_it_button = None
+                # 尝试多种方式查找"Got it"按钮
+                try:
+                    got_it_button = driver.find_element(By.XPATH, "//button[contains(text(), 'Got it') or contains(text(), 'got it') or contains(text(), '知道了')]")
+                except:
+                    try:
+                        got_it_button = driver.find_element(By.XPATH, "//button[@aria-label='Got it' or @aria-label='知道了']")
+                    except:
+                        pass
+                
+                if got_it_button and got_it_button.is_displayed():
+                    print(f"[创收检测] 检测到上层弹窗，点击Got it按钮...")
+                    got_it_button.click()
+                    time.sleep(2)
+                    print(f"[创收检测] ✅ 已点击Got it按钮")
+            except Exception as got_it_err:
+                print(f"[创收检测] 未检测到Got it按钮或点击失败（可忽略）: {str(got_it_err)}")
+            
             # 查找Continue按钮
             continue_button = None
             try:
@@ -230,7 +251,7 @@ def detect_monetization_requirement(driver, channel_url, account_id=None, browse
                     continue_button = driver.find_element(By.XPATH, "//button[@aria-label='Continue' or @aria-label='继续']")
                 except:
                     pass
-            
+
             if continue_button and continue_button.is_displayed():
                 print(f"[创收检测] 检测到欢迎弹窗，点击Continue按钮...")
                 continue_button.click()
@@ -244,71 +265,142 @@ def detect_monetization_requirement(driver, channel_url, account_id=None, browse
         # 向下滚动页面，确保创收要求区域可见
         print(f"[创收检测] 向下滚动页面...")
         try:
-            # 滚动到页面中部
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight / 2);")
-            time.sleep(2)
-            # 再滚动一点，确保Shorts区域可见
-            driver.execute_script("window.scrollBy(0, 300);")
-            time.sleep(1)
+            # 尝试找到YouTube Studio的主滚动容器
+            scroll_containers = [
+                "tp-yt-app-drawer[opened] #contentContainer",
+                "#page-manager",
+                "ytcp-app",
+                "body"
+            ]
+            
+            scrolled = False
+            for container_selector in scroll_containers:
+                try:
+                    container = driver.find_element(By.CSS_SELECTOR, container_selector)
+                    # 使用JavaScript滚动容器
+                    driver.execute_script("""
+                        arguments[0].scrollTop = arguments[0].scrollHeight / 2;
+                    """, container)
+                    time.sleep(1)
+                    driver.execute_script("""
+                        arguments[0].scrollTop += 500;
+                    """, container)
+                    time.sleep(1)
+                    print(f"[创收检测] ✅ 成功滚动容器: {container_selector}")
+                    scrolled = True
+                    break
+                except:
+                    continue
+            
+            # 如果没有找到特定容器，使用传统的window滚动
+            if not scrolled:
+                print(f"[创收检测] 使用传统window滚动方式...")
+                driver.execute_script("window.scrollTo(0, document.documentElement.scrollHeight / 2);")
+                time.sleep(1)
+                driver.execute_script("window.scrollBy(0, 500);")
+                time.sleep(1)
+            
+            # 额外尝试：直接找到Shorts区域并滚动到可见
+            try:
+                shorts_element = driver.find_element(By.XPATH, "//div[contains(@class, 'shorts-progress')]")
+                driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", shorts_element)
+                time.sleep(2)
+                print(f"[创收检测] ✅ 已滚动到Shorts区域")
+            except:
+                print(f"[创收检测] 未找到Shorts区域元素（将继续尝试其他方法）")
+            
             print(f"[创收检测] ✅ 页面滚动完成")
         except Exception as scroll_err:
             print(f"[创收检测] 滚动页面时出错: {str(scroll_err)}")
         
-        # 获取所有threshold元素
+        # 获取Shorts创收要求的threshold值
         threshold_value = None
-        all_thresholds = []
         
+        # 方法1（最优先）：精确定位 shorts-progress 区域的 threshold 元素
         try:
-            print(f"[创收检测] 开始获取所有threshold元素...")
-            all_thresholds = driver.find_elements(By.XPATH, "//span[contains(@class, 'threshold')]")
-            print(f"[创收检测] 页面上共有 {len(all_thresholds)} 个threshold元素")
+            print(f"[创收检测] 方法1: 精确定位shorts-progress中的threshold元素...")
+            # 更精确的定位：确保是在watch-and-shorts-progress容器内的shorts-progress
+            shorts_threshold = driver.find_element(
+                By.XPATH,
+                "//div[contains(@class, 'watch-and-shorts-progress')]//div[contains(@class, 'shorts-progress')]//span[contains(@class, 'threshold')]"
+            )
+            threshold_value = shorts_threshold.text.strip()
+            print(f"[创收检测] ✅ 方法1成功 - Shorts threshold值: {threshold_value}")
             
-            # 打印所有threshold的值（调试用）
-            for idx, th in enumerate(all_thresholds):
-                try:
-                    th_text = th.text.strip()
-                    print(f"[创收检测调试] threshold {idx+1}: {th_text}")
-                except:
-                    pass
-            
-            # 标准的YouTube创收页面有3个threshold：
-            # 1. subscribers (1,000)
-            # 2. watch hours (4,000)
-            # 3. shorts views (3M 或 10M) ← 这是我们需要的
-            if len(all_thresholds) >= 3:
-                threshold_value = all_thresholds[2].text.strip()  # 取第3个（索引2）
-                print(f"[创收检测] ✅ 成功获取第3个threshold（Shorts）值: {threshold_value}")
-            else:
-                print(f"[创收检测] ⚠️ threshold元素数量不足: {len(all_thresholds)}")
-                
+            # 额外验证：如果获取到的值不包含M，说明可能获取错了
+            if threshold_value and 'M' not in threshold_value and 'million' not in threshold_value.lower():
+                print(f"[创收检测] ⚠️ 方法1获取的值可能不正确（不包含M）: {threshold_value}，尝试其他方法...")
+                threshold_value = None
         except Exception as e:
-            print(f"[创收检测] 获取threshold元素失败: {str(e)}")
-        
-        # 备用方法1：精确定位 shorts-progress 区域的 threshold 元素
+            print(f"[创收检测] 方法1失败: {str(e)}")
+
+        # 方法2：通过ID定位
         if not threshold_value:
             try:
-                print(f"[创收检测] 尝试备用方法1: 定位shorts-progress中的threshold元素...")
-                shorts_threshold = driver.find_element(
-                    By.XPATH, 
-                    "//div[contains(@class, 'shorts-progress')]//span[contains(@class, 'threshold')]"
-                )
-                threshold_value = shorts_threshold.text.strip()
-                print(f"[创收检测] ✅ 备用方法1成功 - Shorts threshold值: {threshold_value}")
-            except Exception as e:
-                print(f"[创收检测] 备用方法1失败: {str(e)}")
-        
-        # 备用方法2：通过ID定位
-        if not threshold_value:
-            try:
-                print(f"[创收检测] 尝试备用方法2: 通过shorts-count ID定位...")
+                print(f"[创收检测] 方法2: 通过shorts-count ID定位...")
                 shorts_count_elem = driver.find_element(By.ID, "shorts-count")
                 # 找到父容器，然后找threshold
                 parent_div = shorts_count_elem.find_element(By.XPATH, "./ancestor::div[contains(@class, 'shorts-progress')]")
                 shorts_threshold = parent_div.find_element(By.XPATH, ".//span[contains(@class, 'threshold')]")
                 threshold_value = shorts_threshold.text.strip()
-                print(f"[创收检测] ✅ 备用方法2成功 - Shorts threshold值: {threshold_value}")
+                print(f"[创收检测] ✅ 方法2成功 - Shorts threshold值: {threshold_value}")
+                
+                # 验证
+                if threshold_value and 'M' not in threshold_value and 'million' not in threshold_value.lower():
+                    print(f"[创收检测] ⚠️ 方法2获取的值可能不正确: {threshold_value}")
+                    threshold_value = None
             except Exception as e:
-                print(f"[创收检测] 备用方法2失败: {str(e)}")
+                print(f"[创收检测] 方法2失败: {str(e)}")
+        
+        # 方法2.5：尝试通过"valid public Shorts views"文本定位
+        if not threshold_value:
+            try:
+                print(f"[创收检测] 方法2.5: 通过Shorts views文本定位...")
+                # 找到包含"Shorts views"的元素
+                shorts_views_elem = driver.find_element(By.XPATH, "//*[contains(text(), 'Shorts views') or contains(text(), 'shorts views')]")
+                # 向上找到progress-text容器
+                progress_text = shorts_views_elem.find_element(By.XPATH, "./ancestor::div[contains(@class, 'progress-text')]")
+                # 在该容器中找threshold
+                shorts_threshold = progress_text.find_element(By.XPATH, ".//span[contains(@class, 'threshold')]")
+                threshold_value = shorts_threshold.text.strip()
+                print(f"[创收检测] ✅ 方法2.5成功 - Shorts threshold值: {threshold_value}")
+            except Exception as e:
+                print(f"[创收检测] 方法2.5失败: {str(e)}")
+
+        # 方法3（兜底）：获取所有threshold元素并调试
+        if not threshold_value:
+            all_thresholds = []
+            try:
+                print(f"[创收检测] 方法3: 获取所有threshold元素进行分析...")
+                all_thresholds = driver.find_elements(By.XPATH, "//span[contains(@class, 'threshold')]")
+                print(f"[创收检测] 页面上共有 {len(all_thresholds)} 个threshold元素")
+
+                # 打印所有threshold的值（调试用）
+                for idx, th in enumerate(all_thresholds):
+                    try:
+                        th_text = th.text.strip()
+                        print(f"[创收检测调试] threshold {idx+1}: {th_text}")
+                    except:
+                        pass
+
+                # 尝试查找包含M的threshold（通常是Shorts的要求）
+                for idx, th in enumerate(all_thresholds):
+                    try:
+                        th_text = th.text.strip()
+                        if 'M' in th_text or 'million' in th_text.lower():
+                            threshold_value = th_text
+                            print(f"[创收检测] ✅ 方法3成功 - 找到包含M的threshold（第{idx+1}个）: {threshold_value}")
+                            break
+                    except:
+                        pass
+
+                # 如果还是没找到，尝试使用第4个threshold（索引3）
+                if not threshold_value and len(all_thresholds) >= 4:
+                    threshold_value = all_thresholds[3].text.strip()
+                    print(f"[创收检测] 方法3 - 使用第4个threshold值: {threshold_value}")
+
+            except Exception as e:
+                print(f"[创收检测] 方法3失败: {str(e)}")
         
         # 判断结果
         if not threshold_value:
