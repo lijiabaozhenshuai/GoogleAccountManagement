@@ -135,6 +135,13 @@ def add_account():
     return jsonify({'code': 0, 'message': '添加成功', 'data': account.to_dict()})
 
 
+@account_bp.route('/<int:id>', methods=['GET'])
+def get_account(id):
+    """获取单个账号"""
+    account = Account.query.get_or_404(id)
+    return jsonify({'code': 0, 'data': account.to_dict()})
+
+
 @account_bp.route('/<int:id>', methods=['PUT'])
 def update_account(id):
     """更新账号"""
@@ -147,6 +154,12 @@ def update_account(id):
     # 支持修改环境ID
     if 'browser_env_id' in data:
         account.browser_env_id = data.get('browser_env_id') or None
+    # 支持修改登录状态
+    if 'login_status' in data:
+        account.login_status = data.get('login_status') or None
+    # 支持修改频道状态
+    if 'channel_status' in data:
+        account.channel_status = data.get('channel_status') or None
     db.session.commit()
     return jsonify({'code': 0, 'message': '更新成功', 'data': account.to_dict()})
 

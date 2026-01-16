@@ -916,15 +916,20 @@
     // 打开编辑弹窗
     async function openEditModal(id) {
         try {
-            // 获取账号数据
-            const res = await fetch(API_BASE);
-            const data = await res.json();
-            const item = data.data.find(i => i.id === id);
-            
-            if (!item) {
+            // 获取单个账号数据
+            const res = await fetch(`${API_BASE}/${id}`);
+            if (!res.ok) {
                 showToast('未找到数据', 'error');
                 return;
             }
+            
+            const data = await res.json();
+            if (data.code !== 0 || !data.data) {
+                showToast('未找到数据', 'error');
+                return;
+            }
+            
+            const item = data.data;
             
             // 获取所有可用的浏览器环境
             const browsersRes = await fetch('/api/hubstudio/browsers?page_size=1000');
@@ -953,6 +958,22 @@
                 }).join('')}
             `;
             
+            // 添加登录状态选择框
+            const loginStatusOptions = `
+                <option value="">-- 不设置 --</option>
+                ${Object.entries(LOGIN_STATUS_MAP).map(([key, value]) => `
+                    <option value="${key}" ${item.login_status === key ? 'selected' : ''}>${value}</option>
+                `).join('')}
+            `;
+            
+            // 添加频道状态选择框
+            const channelStatusOptions = `
+                <option value="">-- 不设置 --</option>
+                ${Object.entries(CHANNEL_STATUS_MAP).map(([key, value]) => `
+                    <option value="${key}" ${item.channel_status === key ? 'selected' : ''}>${value}</option>
+                `).join('')}
+            `;
+            
             showModal('编辑账号', `
                 <form id="edit-form">
                     ${fields}
@@ -960,6 +981,18 @@
                         <label class="form-label">环境ID</label>
                         <select class="form-input" name="browser_env_id" style="cursor: pointer;">
                             ${envOptions}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">登录状态</label>
+                        <select class="form-input" name="login_status" style="cursor: pointer;">
+                            ${loginStatusOptions}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">频道状态</label>
+                        <select class="form-input" name="channel_status" style="cursor: pointer;">
+                            ${channelStatusOptions}
                         </select>
                     </div>
                 </form>
@@ -970,7 +1003,9 @@
                     account: formData.get('account'),
                     password: formData.get('password'),
                     backup_email: formData.get('backup_email'),
-                    browser_env_id: formData.get('browser_env_id') || null
+                    browser_env_id: formData.get('browser_env_id') || null,
+                    login_status: formData.get('login_status') || null,
+                    channel_status: formData.get('channel_status') || null
                 };
                 
                 try {
@@ -1161,15 +1196,20 @@
     // 创建YouTube频道
     async function createChannel(id) {
         try {
-            // 获取账号数据，判断是否已创建频道
-            const res = await fetch(API_BASE);
-            const data = await res.json();
-            const account = data.data.find(i => i.id === id);
-            
-            if (!account) {
+            // 获取单个账号数据，判断是否已创建频道
+            const res = await fetch(`${API_BASE}/${id}`);
+            if (!res.ok) {
                 showToast('未找到账号', 'error');
                 return;
             }
+            
+            const accountData = await res.json();
+            if (accountData.code !== 0 || !accountData.data) {
+                showToast('未找到账号', 'error');
+                return;
+            }
+            
+            const account = accountData.data;
             
             // 判断是创建频道还是检测创收要求
             const isChannelCreated = account.channel_status === 'created' && account.channel_url;
